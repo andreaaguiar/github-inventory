@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GitHub Org Inventory</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f3f4f6; color: #111; padding: 24px; }
+    h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+    .subtitle { color: #6b7280; font-size: 14px; margin-bottom: 20px; }
+    .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; margin-bottom: 20px; }
+    .config-grid { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .field.orgs { flex: 2; min-width: 220px; }
+    .field.token { flex: 2; min-width: 220px; }
+    label { font-size: 12px; font-weight: 600; color: #374151; }
+    label span { color: #9ca3af; font-weight: 400; }
+    textarea, input[type=password] { width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; font-family: monospace; }
+    textarea { resize: vertical; }
+    button.primary { padding: 9px 20px; background: #1d4ed8; color: #fff; border: none; border-radius: 6px; font-weight: 600; font-size: 14px; cursor: pointer; white-space: nowrap; }
+    button.primary:disabled { background: #9ca3af; cursor: not-allowed; }
+    button.primary:hover:not(:disabled) { background: #1e40af; }
+    .status-pills { margin-top: 12px; display: flex; gap: 6px; flex-wrap: wrap; }
+    .pill { font-size: 12px; padding: 3px 10px; border-radius: 99px; font-weight: 500; }
+    .pill.ok { background: #d1fae5; color: #065f46; }
+    .pill.loading { background: #dbeafe; color: #1e40af; }
+    .pill.error { background: #fee2e2; color: #b91c1c; }
+    .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; align-items: flex-end; }
+    .stat-card { flex: 1; min-width: 100px; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px 16px; }
+    .stat-icon { font-size: 20px; }
+    .stat-val { font-size: 24px; font-weight: 700; }
+    .stat-label { font-size: 11px; color: #6b7280; }
+    .last-updated { font-size: 11px; color: #9ca3af; align-self: flex-end; padding-bottom: 4px; }
+    .org-filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+    .org-filters span { font-size: 12px; font-weight: 600; color: #374151; }
+    button.filter { padding: 4px 12px; border-radius: 99px; border: 1px solid #d1d5db; font-size: 12px; font-weight: 600; cursor: pointer; background: #fff; color: #374151; }
+    button.filter.active { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+    .tabs { display: flex; gap: 4px; border-bottom: 2px solid #e5e7eb; margin-bottom: 14px; flex-wrap: wrap; }
+    button.tab { padding: 8px 16px; border: none; background: none; cursor: pointer; font-size: 14px; color: #6b7280; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+    button.tab.active { font-weight: 700; color: #1d4ed8; border-bottom-color: #1d4ed8; }
+    .view-toggle { display: flex; border: 1px solid #d1d5db; border-radius: 6px; overflow: hidden; margin-bottom: 14px; width: fit-content; }
+    button.view-btn { padding: 6px 14px; border: none; background: #fff; color: #374151; font-size: 13px; font-weight: 600; cursor: pointer; }
+    button.view-btn.active { background: #1d4ed8; color: #fff; }
+    button.view-btn:not(:last-child) { border-right: 1px solid #d1d5db; }
+    .badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; }
+    .badge-count { background: #e5e7eb; color: #374151; font-size: 11px; padding: 1px 7px; border-radius: 99px; margin-left: 4px; }
+    .toolbar { display: flex; gap: 10px; margin-bottom: 14px; align-items: center; }
+    .toolbar input { flex: 1; padding: 7px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
+    button.export { padding: 7px 14px; background: #fff; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; color: #374151; }
+    button.export:hover { background: #f9fafb; }
+    .table-wrap { border: 1px solid #e5e7eb; border-radius: 10px; overflow: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th { padding: 10px 14px; text-align: left; font-weight: 600; color: #374151; font-size: 12px; border-bottom: 1px solid #e5e7eb; background: #f9fafb; white-space: nowrap; }
+    td { padding: 8px 14px; vertical-align: middle; }
+    tr:nth-child(even) td { background: #f9fafb; }
+    td a { color: #1d4ed8; text-decoration: none; }
+    td img { width: 28px; height: 28px; border-radius: 50%; vertical-align: middle; }
+    .org-col { font-size: 12px; font-weight: 600; color: #6b7280; }
+    .org-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+    .org-tag { font-size: 11px; padding: 2px 7px; border-radius: 99px; background: #e0e7ff; color: #3730a3; font-weight: 600; }
+    .role-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+    .activity-cell { display: flex; flex-direction: column; gap: 3px; }
+    .activity-pill { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 99px; white-space: nowrap; }
+    .activity-org { background: #d1fae5; color: #065f46; }
+    .activity-public { background: #dbeafe; color: #1e40af; }
+    .activity-none { background: #f3f4f6; color: #9ca3af; }
+    .org-cards { display: flex; flex-direction: column; gap: 16px; }
+    .org-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 20px; }
+    .org-card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .org-card-header img { width: 48px; height: 48px; border-radius: 10px; border: 1px solid #e5e7eb; }
+    .org-card-header h2 { font-size: 16px; font-weight: 700; margin: 0; }
+    .org-card-header a { font-size: 12px; color: #1d4ed8; }
+    .org-meta { display: flex; gap: 12px; flex-wrap: wrap; }
+    .org-meta-item { flex: 1; min-width: 140px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 14px; }
+    .org-meta-item[onclick]:hover { background: #eff6ff; border-color: #bfdbfe; }
+    .org-meta-label { font-size: 11px; color: #6b7280; font-weight: 600; margin-bottom: 2px; }
+    .org-meta-value { font-size: 14px; font-weight: 600; color: #111; }
+    .empty { padding: 48px 24px; text-align: center; color: #9ca3af; border: 2px dashed #e5e7eb; border-radius: 12px; }
+    .empty-icon { font-size: 40px; margin-bottom: 12px; }
+    .empty-title { font-size: 16px; font-weight: 600; color: #6b7280; margin-bottom: 6px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+
+<h1>🏢 GitHub Org Inventory</h1>
+<p class="subtitle">Track members, collaborators, and teams across multiple GitHub organizations</p>
+
+<div class="card">
+  <div class="config-grid">
+    <div class="field orgs">
+      <label>Organizations <span>(one per line, or comma-separated)</span></label>
+      <textarea id="orgInput" rows="3" placeholder="my-org&#10;another-org&#10;third-org"></textarea>
+    </div>
+    <div class="field token">
+      <label>Personal Access Token <span>(read:org — add repo scope for private repo activity)</span></label>
+      <input type="password" id="tokenInput" placeholder="ghp_..." />
+    </div>
+    <button class="primary" id="fetchBtn" onclick="handleFetch()">Fetch Data</button>
+  </div>
+  <div class="status-pills" id="statusPills"></div>
+</div>
+
+<div class="stats hidden" id="statsSection">
+  <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-val" id="statMembers">0</div><div class="stat-label">Total Members</div></div>
+  <div class="stat-card"><div class="stat-icon">🧍</div><div class="stat-val" id="statUniqueMembers">0</div><div class="stat-label">Unique Members</div></div>
+  <div class="stat-card"><div class="stat-icon">🔑</div><div class="stat-val" id="statAdmins">0</div><div class="stat-label">Admins</div></div>
+  <div class="stat-card"><div class="stat-icon">🤝</div><div class="stat-val" id="statCollabs">0</div><div class="stat-label">Collaborators</div></div>
+  <div class="stat-card"><div class="stat-icon">🏷️</div><div class="stat-val" id="statTeams">0</div><div class="stat-label">Teams</div></div>
+  <div class="stat-card"><div class="stat-icon">🏢</div><div class="stat-val" id="statOrgs">0</div><div class="stat-label">Orgs Loaded</div></div>
+  <div class="last-updated" id="lastUpdated"></div>
+</div>
+
+<div class="org-filters hidden" id="orgFilters"><span>Filter by org:</span></div>
+
+<div class="hidden" id="tableSection">
+  <div class="tabs">
+    <button class="tab active" id="tab-orgs"          onclick="switchTab('orgs')">Org Dashboard <span class="badge-count" id="cnt-orgs">0</span></button>
+    <button class="tab"        id="tab-members"       onclick="switchTab('members')">Members <span class="badge-count" id="cnt-members">0</span></button>
+    <button class="tab"        id="tab-collaborators" onclick="switchTab('collaborators')">Outside Collaborators <span class="badge-count" id="cnt-collaborators">0</span></button>
+    <button class="tab"        id="tab-teams"         onclick="switchTab('teams')">Teams <span class="badge-count" id="cnt-teams">0</span></button>
+  </div>
+  <div class="view-toggle" id="viewToggle" style="display:none">
+    <button class="view-btn active" id="view-all"    onclick="switchView('all')">All entries</button>
+    <button class="view-btn"        id="view-unique" onclick="switchView('unique')">Unique only</button>
+  </div>
+  <div class="toolbar" id="toolbar">
+    <input type="text" id="searchInput" placeholder="Search by username, name, email, or org…" oninput="renderTable()" />
+    <button class="export" onclick="exportCSV()">⬇ Export CSV</button>
+  </div>
+  <div class="table-wrap" id="tableWrap"></div>
+</div>
+
+<div class="empty" id="emptyState">
+  <div class="empty-icon">🏢</div>
+  <div class="empty-title">No data yet</div>
+  <div>Enter one or more GitHub org names and a Personal Access Token, then click Fetch Data</div>
+</div>
+
+<script>
+const BASE = "https://api.github.com";
+let state = { data: {}, orgInfo: {}, tab: "orgs", selectedOrg: "__all__", view: "all" };
+
+/* ── helpers ── */
+async function fetchAll(url, token, params = {}) {
+  let results = [], page = 1;
+  while (true) {
+    const q = new URLSearchParams({ per_page: 100, page, ...params });
+    const res = await fetch(`${url}?${q}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" }
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const data = await res.json();
+    if (!Array.isArray(data) || !data.length) break;
+    results.push(...data);
+    if (data.length < 100) break;
+    page++;
+  }
+  return results;
+}
+
+async function fetchOne(url, token) {
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" }
+  });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+function fmtDate(ts) {
+  if (!ts) return null;
+  const d = new Date(ts);
+  if (isNaN(d)) return null;
+  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+/* ── activity ── */
+async function fetchAuditMap(org, token) {
+  const map = {};
+  try {
+    const res = await fetch(`${BASE}/orgs/${org}/events?per_page=100`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" }
+    });
+    if (!res.ok) return map;
+    const events = await res.json();
+    if (!Array.isArray(events)) return map;
+    for (const e of events) {
+      const login = e.actor?.login;
+      const ts = e.created_at;
+      if (login && ts && (!map[login] || ts > map[login])) map[login] = ts;
+    }
+  } catch { /* skip */ }
+  return map;
+}
+
+async function fetchLastPublicEvent(login, token) {
+  try {
+    const res = await fetch(`${BASE}/users/${login}/events?per_page=1`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" }
+    });
+    if (!res.ok) return "";
+    const data = await res.json();
+    return Array.isArray(data) && data.length ? data[0].created_at : "";
+  } catch { return ""; }
+}
+
+/* ── org info ── */
+async function fetchOrgInfo(org, token) {
+  try { return await fetchOne(`${BASE}/orgs/${org}`, token); }
+  catch { return null; }
+}
+
+/* ── fetch org data ── */
+async function fetchOrg(org, token) {
+  const [members, collaborators, teams, auditMap] = await Promise.all([
+    fetchAll(`${BASE}/orgs/${org}/members`, token, { role: "all" }),
+    fetchAll(`${BASE}/orgs/${org}/outside_collaborators`, token),
+    fetchAll(`${BASE}/orgs/${org}/teams`, token),
+    fetchAuditMap(org, token),
+  ]);
+
+  const teamsWithMembers = await Promise.all(
+    teams.map(async t => {
+      const teamMembers = await fetchAll(`${BASE}/orgs/${org}/teams/${t.slug}/members`, token);
+      return { ...t, members: teamMembers };
+    })
+  );
+
+  const membersWithRoles = await Promise.all(
+    members.map(async m => {
+      try {
+        const [membership, profile, lastPublicEvent] = await Promise.all([
+          fetchOne(`${BASE}/orgs/${org}/memberships/${m.login}`, token),
+          fetchOne(`${BASE}/users/${m.login}`, token),
+          fetchLastPublicEvent(m.login, token),
+        ]);
+        return { ...m, role: membership.role, state: membership.state, name: profile.name || "", email: profile.email || "", lastOrgEvent: auditMap[m.login] || "", lastPublicEvent };
+      } catch {
+        return { ...m, role: "member", state: "active", name: "", email: "", lastOrgEvent: auditMap[m.login] || "", lastPublicEvent: "" };
+      }
+    })
+  );
+
+  const collaboratorsWithProfile = await Promise.all(
+    collaborators.map(async c => {
+      try {
+        const [profile, lastPublicEvent] = await Promise.all([
+          fetchOne(`${BASE}/users/${c.login}`, token),
+          fetchLastPublicEvent(c.login, token),
+        ]);
+        return { ...c, name: profile.name || "", email: profile.email || "", lastOrgEvent: auditMap[c.login] || "", lastPublicEvent };
+      } catch {
+        return { ...c, name: "", email: "", lastOrgEvent: auditMap[c.login] || "", lastPublicEvent: "" };
+      }
+    })
+  );
+
+  return { members: membersWithRoles, collaborators: collaboratorsWithProfile, teams: teamsWithMembers };
+}
+
+/* ── ui helpers ── */
+function setPill(org, status, msg = "") {
+  const pills = document.getElementById("statusPills");
+  let pill = document.getElementById(`pill-${CSS.escape(org)}`);
+  if (!pill) { pill = document.createElement("span"); pill.id = `pill-${CSS.escape(org)}`; pills.appendChild(pill); }
+  pill.className = `pill ${status}`;
+  pill.textContent = `${{ loading:"⏳", ok:"✓", error:"✗" }[status]} ${org}${msg ? " — " + msg : ""}`;
+}
+
+const BADGE_COLORS = {
+  admin:"#fef3c7;#92400e", member:"#dbeafe;#1e40af", owner:"#fce7f3;#9d174d",
+  active:"#d1fae5;#065f46", pending:"#fef9c3;#854d0e", secret:"#f3f4f6;#374151",
+  closed:"#f3f4f6;#374151", pull:"#ede9fe;#5b21b6", push:"#dbeafe;#1e40af",
+  maintain:"#d1fae5;#065f46", triage:"#fef9c3;#854d0e",
+};
+function badge(label) {
+  const s = BADGE_COLORS[(label||"").toLowerCase()] || "#e5e7eb;#374151";
+  const [bg,c] = s.split(";");
+  return `<span class="badge" style="background:${bg};color:${c}">${label||""}</span>`;
+}
+
+function orgTags(orgs) {
+  return `<div class="org-tags">${orgs.map(o=>`<span class="org-tag">${o}</span>`).join("")}</div>`;
+}
+
+function activityCell(lastOrgEvent, lastPublicEvent) {
+  const org = lastOrgEvent
+    ? `<span class="activity-pill activity-org">Org: ${fmtDate(lastOrgEvent)}</span>`
+    : `<span class="activity-pill activity-none">Org: —</span>`;
+  const pub = lastPublicEvent
+    ? `<span class="activity-pill activity-public">Public: ${fmtDate(lastPublicEvent)}</span>`
+    : `<span class="activity-pill activity-none">Public: —</span>`;
+  return `<div class="activity-cell">${org}${pub}</div>`;
+}
+
+function activityCellMulti(lastActives, lastPublicEvent) {
+  const orgPart = lastActives && lastActives.length
+    ? lastActives.map(a => `<span class="activity-pill activity-org">${a.org}: ${fmtDate(a.date)}</span>`).join("")
+    : `<span class="activity-pill activity-none">Org: —</span>`;
+  const pub = lastPublicEvent
+    ? `<span class="activity-pill activity-public">Public: ${fmtDate(lastPublicEvent)}</span>`
+    : `<span class="activity-pill activity-none">Public: —</span>`;
+  return `<div class="activity-cell">${orgPart}${pub}</div>`;
+}
+
+/* ── main fetch ── */
+async function handleFetch() {
+  const orgInput = document.getElementById("orgInput").value;
+  const token = document.getElementById("tokenInput").value;
+  const orgs = orgInput.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+  if (!orgs.length || !token) return;
+
+  document.getElementById("statusPills").innerHTML = "";
+  document.getElementById("fetchBtn").disabled = true;
+  document.getElementById("fetchBtn").textContent = "Fetching…";
+  state.data = {}; state.orgInfo = {};
+  state.selectedOrg = "__all__"; state.view = "all";
+
+  orgs.forEach(org => setPill(org, "loading"));
+  await Promise.allSettled(orgs.map(async org => {
+    try {
+      const [orgData, orgInfo] = await Promise.all([fetchOrg(org, token), fetchOrgInfo(org, token)]);
+      state.data[org] = orgData;
+      state.orgInfo[org] = orgInfo;
+      setPill(org, "ok");
+    } catch (e) {
+      setPill(org, "error", e.message);
+    }
+  }));
+
+  document.getElementById("lastUpdated").textContent = "Updated: " + new Date().toLocaleTimeString();
+  document.getElementById("fetchBtn").disabled = false;
+  document.getElementById("fetchBtn").textContent = "↻ Refresh All";
+  document.getElementById("cnt-orgs").textContent = Object.keys(state.data).length;
+  updateStats();
+  renderOrgFilters();
+  switchTab("orgs");
+  document.getElementById("statsSection").classList.remove("hidden");
+  document.getElementById("orgFilters").classList.remove("hidden");
+  document.getElementById("tableSection").classList.remove("hidden");
+  document.getElementById("emptyState").classList.add("hidden");
+}
+
+/* ── stats ── */
+function updateStats() {
+  const orgs = state.selectedOrg === "__all__" ? Object.keys(state.data) : [state.selectedOrg];
+  const d = orgs.map(o => state.data[o]).filter(Boolean);
+  const totalM = d.reduce((a,o) => a + o.members.length, 0);
+  const uniqueM = new Set(d.flatMap(o => o.members.map(m => m.login))).size;
+  document.getElementById("statMembers").textContent = totalM;
+  document.getElementById("statUniqueMembers").textContent = uniqueM;
+  document.getElementById("statAdmins").textContent = d.reduce((a,o) => a + o.members.filter(m => m.role==="admin").length, 0);
+  document.getElementById("statCollabs").textContent = new Set(d.flatMap(o => o.collaborators.map(c => c.login))).size;
+  document.getElementById("statTeams").textContent = new Set(d.flatMap(o => o.teams.map(t => t.name))).size;
+  document.getElementById("statOrgs").textContent = orgs.length;
+  document.getElementById("cnt-members").textContent = totalM;
+  document.getElementById("cnt-collaborators").textContent = d.reduce((a,o) => a + o.collaborators.length, 0);
+  document.getElementById("cnt-teams").textContent = d.reduce((a,o) => a + o.teams.length, 0);
+}
+
+/* ── org filters ── */
+function renderOrgFilters() {
+  const el = document.getElementById("orgFilters");
+  el.innerHTML = "<span>Filter by org:</span>";
+  ["__all__", ...Object.keys(state.data)].forEach(org => {
+    const btn = document.createElement("button");
+    btn.className = "filter" + (state.selectedOrg === org ? " active" : "");
+    btn.textContent = org === "__all__" ? "All Orgs" : org;
+    btn.onclick = () => {
+      state.selectedOrg = org;
+      const isAll = org === "__all__";
+      document.getElementById("viewToggle").style.display = (isAll && state.tab !== "orgs" && state.tab !== "teams") ? "" : "none";
+      renderOrgFilters();
+      updateStats();
+      renderTable();
+    };
+    el.appendChild(btn);
+  });
+}
+
+/* ── tabs ── */
+function jumpToTab(org, tab) {
+  state.selectedOrg = org;
+  document.getElementById("viewToggle").style.display = "none";
+  renderOrgFilters();
+  updateStats();
+  switchTab(tab);
+}
+
+function switchTab(tab) {
+  state.tab = tab;
+  document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
+  document.getElementById(`tab-${tab}`).classList.add("active");
+  const showToggle = (tab === "members" || tab === "collaborators") && state.selectedOrg === "__all__";
+  document.getElementById("viewToggle").style.display = showToggle ? "" : "none";
+  document.getElementById("toolbar").style.display = tab === "orgs" ? "none" : "";
+  if (document.getElementById("searchInput")) document.getElementById("searchInput").value = "";
+  renderTable();
+}
+
+function switchView(view) {
+  state.view = view;
+  document.getElementById("view-all").classList.toggle("active", view === "all");
+  document.getElementById("view-unique").classList.toggle("active", view === "unique");
+  renderTable();
+}
+
+/* ── get rows ── */
+function getRows() {
+  const orgs = state.selectedOrg === "__all__" ? Object.keys(state.data) : [state.selectedOrg];
+  const search = (document.getElementById("searchInput")?.value || "").toLowerCase();
+  const isUnique = state.view === "unique" && state.selectedOrg === "__all__";
+  let rows = [];
+
+  if (state.tab === "members") {
+    if (isUnique) {
+      const map = {};
+      orgs.forEach(org => {
+        (state.data[org]?.members || []).forEach(m => {
+          if (!map[m.login]) map[m.login] = { ...m, _orgs:[], _roles:[], _lastActives:[], lastPublicEvent: m.lastPublicEvent };
+          map[m.login]._orgs.push(org);
+          map[m.login]._roles.push({ org, role: m.role });
+          if (m.lastOrgEvent) map[m.login]._lastActives.push({ org, date: m.lastOrgEvent });
+          if (m.lastPublicEvent && (!map[m.login].lastPublicEvent || m.lastPublicEvent > map[m.login].lastPublicEvent))
+            map[m.login].lastPublicEvent = m.lastPublicEvent;
+        });
+      });
+      rows = Object.values(map);
+    } else {
+      rows = orgs.flatMap(org => (state.data[org]?.members || []).map(m => ({ ...m, _org: org })));
+    }
+  } else if (state.tab === "collaborators") {
+    if (isUnique) {
+      const map = {};
+      orgs.forEach(org => {
+        (state.data[org]?.collaborators || []).forEach(c => {
+          if (!map[c.login]) map[c.login] = { ...c, _orgs:[], _lastActives:[], lastPublicEvent: c.lastPublicEvent };
+          map[c.login]._orgs.push(org);
+          if (c.lastOrgEvent) map[c.login]._lastActives.push({ org, date: c.lastOrgEvent });
+          if (c.lastPublicEvent && (!map[c.login].lastPublicEvent || c.lastPublicEvent > map[c.login].lastPublicEvent))
+            map[c.login].lastPublicEvent = c.lastPublicEvent;
+        });
+      });
+      rows = Object.values(map);
+    } else {
+      rows = orgs.flatMap(org => (state.data[org]?.collaborators || []).map(c => ({ ...c, _org: org })));
+    }
+  } else if (state.tab === "teams") {
+    if (isUnique) {
+      const map = {};
+      orgs.forEach(org => {
+        (state.data[org]?.teams || []).forEach(t => {
+          if (!map[t.name]) map[t.name] = { ...t, _orgs:[], _allMembers: new Map() };
+          map[t.name]._orgs.push(org);
+          (t.members||[]).forEach(m => map[t.name]._allMembers.set(m.login, m));
+        });
+      });
+      rows = Object.values(map).map(t => ({ ...t, _uniqueMembers: [...t._allMembers.values()] }));
+    } else {
+      rows = orgs.flatMap(org => (state.data[org]?.teams || []).map(t => ({ ...t, _org: org })));
+    }
+  }
+
+  if (!search) return rows;
+  return rows.filter(r =>
+    r.login?.toLowerCase().includes(search) ||
+    r.name?.toLowerCase().includes(search) ||
+    r.email?.toLowerCase().includes(search) ||
+    r._org?.toLowerCase().includes(search) ||
+    r._orgs?.some(o => o.toLowerCase().includes(search))
+  );
+}
+
+/* ── render ── */
+function renderTable() {
+  const wrap = document.getElementById("tableWrap");
+  const t = state.tab;
+  const isUnique = state.view === "unique" && state.selectedOrg === "__all__";
+
+  if (t === "orgs") {
+    const orgs = state.selectedOrg === "__all__" ? Object.keys(state.data) : [state.selectedOrg];
+    wrap.style.border = "none";
+    wrap.innerHTML = `<div class="org-cards">${orgs.map(org => {
+      const info = state.orgInfo[org];
+      if (!info) return `<div class="org-card"><strong>${org}</strong> — info unavailable</div>`;
+      const plan = info.plan?.name ? info.plan.name.charAt(0).toUpperCase() + info.plan.name.slice(1) : "—";
+      const planColor = { free:"#e5e7eb;#374151", team:"#dbeafe;#1e40af", enterprise:"#fce7f3;#9d174d" }[info.plan?.name?.toLowerCase()] || "#e5e7eb;#374151";
+      const [pbg,pc] = planColor.split(";");
+      return `<div class="org-card">
+        <div class="org-card-header">
+          <img src="${info.avatar_url}" alt="">
+          <div>
+            <h2>${info.name || org} &nbsp;<span class="badge" style="background:${pbg};color:${pc}">${plan}</span></h2>
+            <a href="${info.html_url}" target="_blank">@${org} ↗</a>
+          </div>
+        </div>
+        <div class="org-meta">
+          <div class="org-meta-item"><div class="org-meta-label">Created</div><div class="org-meta-value">${fmtDate(info.created_at) || "—"}</div></div>
+          <div class="org-meta-item" onclick="jumpToTab('${org}','members')" style="cursor:pointer"><div class="org-meta-label">Members</div><div class="org-meta-value" style="color:#1d4ed8">${state.data[org]?.members.length ?? "—"}</div></div>
+          <div class="org-meta-item" onclick="jumpToTab('${org}','collaborators')" style="cursor:pointer"><div class="org-meta-label">Collaborators</div><div class="org-meta-value" style="color:#1d4ed8">${state.data[org]?.collaborators.length ?? "—"}</div></div>
+          <div class="org-meta-item" onclick="jumpToTab('${org}','teams')" style="cursor:pointer"><div class="org-meta-label">Teams</div><div class="org-meta-value" style="color:#1d4ed8">${state.data[org]?.teams.length ?? "—"}</div></div>
+        </div>
+      </div>`;
+    }).join("")}</div>`;
+    return;
+  }
+
+  wrap.style.border = "1px solid #e5e7eb";
+  const rows = getRows();
+
+  if (t === "members") {
+    if (isUnique) {
+      wrap.innerHTML = `<table>
+        <thead><tr><th>Avatar</th><th>Login</th><th>Name</th><th>Email</th><th>Last Activity</th><th>Orgs & Roles</th><th>Profile</th></tr></thead>
+        <tbody>${rows.map(m => `<tr>
+          <td><img src="${m.avatar_url}" alt=""></td>
+          <td><strong>${m.login}</strong></td>
+          <td>${m.name||'<span style="color:#d1d5db">—</span>'}</td>
+          <td>${m.email||'<span style="color:#d1d5db">—</span>'}</td>
+          <td>${activityCellMulti(m._lastActives, m.lastPublicEvent)}</td>
+          <td><div class="org-tags">${m._roles.map(r => `<span class="org-tag">${r.org}: ${r.role}</span>`).join("")}</div></td>
+          <td><a href="${m.html_url}" target="_blank">View ↗</a></td>
+        </tr>`).join("") || `<tr><td colspan="7" style="padding:24px;text-align:center;color:#9ca3af">No results</td></tr>`}
+        </tbody></table>`;
+    } else {
+      wrap.innerHTML = `<table>
+        <thead><tr><th>Org</th><th>Avatar</th><th>Login</th><th>Name</th><th>Email</th><th>Last Activity</th><th>Role</th><th>Profile</th></tr></thead>
+        <tbody>${rows.map(m => `<tr>
+          <td class="org-col">${m._org}</td>
+          <td><img src="${m.avatar_url}" alt=""></td>
+          <td><strong>${m.login}</strong></td>
+          <td>${m.name||'<span style="color:#d1d5db">—</span>'}</td>
+          <td>${m.email||'<span style="color:#d1d5db">—</span>'}</td>
+          <td>${activityCell(m.lastOrgEvent, m.lastPublicEvent)}</td>
+          <td>${badge(m.role)}</td>
+          <td><a href="${m.html_url}" target="_blank">View ↗</a></td>
+        </tr>`).join("") || `<tr><td colspan="8" style="padding:24px;text-align:center;color:#9ca3af">No results</td></tr>`}
+        </tbody></table>`;
+    }
+  } else if (t === "collaborators") {
+    if (isUnique) {
+      wrap.innerHTML = `<table>
+        <thead><tr><th>Avatar</th><th>Login</th><th>Name</th><th>Email</th><th>Last Activity</th><th>Orgs</th><th>Profile</th></tr></thead>
+        <tbody>${rows.map(c => `<tr>
+          <td><img src="${c.avatar_url}" alt=""></td>
+          <td><strong>${c.login}</strong></td>
+          <td>${c.name||'<span style="color:#d1d5db">—</span>'}</td>
+          <td>${c.email||'<span style="color:#d1d5db">—</span>'}</td>
+          <td>${activityCellMulti(c._lastActives, c.lastPublicEvent)}</td>
+          <td>${orgTags(c._orgs)}</td>
+          <td><a href="${c.html_url}" target="_blank">View ↗</a></td>
+        </tr>`).join("") || `<tr><td colspan="7" style="padding:24px;text-align:center;color:#9ca3af">No outside collaborators found</td></tr>`}
+        </tbody></table>`;
+    } else {
+      wrap.innerHTML = `<table>
+        <thead><tr><th>Org</th><th>Avatar</th><th>Login</th><th>Name</th><th>Email</th><th>Last Activity</th><th>Profile</th></tr></thead>
+        <tbody>${rows.map(c => `<tr>
+          <td class="org-col">${c._org}</td>
+          <td><img src="${c.avatar_url}" alt=""></td>
+          <td><strong>${c.login}</strong></td>
+          <td>${c.name||'<span style="color:#d1d5db">—</span>'}</td>
+          <td>${c.email||'<span style="color:#d1d5db">—</span>'}</td>
+          <td>${activityCell(c.lastOrgEvent, c.lastPublicEvent)}</td>
+          <td><a href="${c.html_url}" target="_blank">View ↗</a></td>
+        </tr>`).join("") || `<tr><td colspan="7" style="padding:24px;text-align:center;color:#9ca3af">No outside collaborators found</td></tr>`}
+        </tbody></table>`;
+    }
+  } else if (t === "teams") {
+    if (isUnique) {
+      wrap.innerHTML = `<table>
+        <thead><tr><th>Team Name</th><th>Appears in Orgs</th><th>Unique Members</th><th>Member Logins</th></tr></thead>
+        <tbody>${rows.map(t => `<tr>
+          <td><strong>${t.name}</strong></td>
+          <td>${orgTags(t._orgs)}</td>
+          <td>${t._uniqueMembers.length}</td>
+          <td style="font-size:12px;color:#6b7280">${t._uniqueMembers.slice(0,5).map(m=>m.login).join(", ")}${t._uniqueMembers.length>5?` +${t._uniqueMembers.length-5} more`:""}</td>
+        </tr>`).join("") || `<tr><td colspan="4" style="padding:24px;text-align:center;color:#9ca3af">No teams found</td></tr>`}
+        </tbody></table>`;
+    } else {
+      wrap.innerHTML = `<table>
+        <thead><tr><th>Org</th><th>Team</th><th>Privacy</th><th>Permission</th><th>Members</th><th>Member Logins</th></tr></thead>
+        <tbody>${rows.map(t => `<tr>
+          <td class="org-col">${t._org}</td>
+          <td><strong>${t.name}</strong></td>
+          <td>${badge(t.privacy)}</td>
+          <td>${badge(t.permission)}</td>
+          <td>${t.members?.length??0}</td>
+          <td style="font-size:12px;color:#6b7280">${(t.members?.slice(0,5).map(m=>m.login).join(", ")||"")}${t.members?.length>5?` +${t.members.length-5} more`:""}</td>
+        </tr>`).join("") || `<tr><td colspan="6" style="padding:24px;text-align:center;color:#9ca3af">No teams found</td></tr>`}
+        </tbody></table>`;
+    }
+  }
+}
+
+/* ── export ── */
+function exportCSV() {
+  const rows = getRows();
+  const isUnique = state.view === "unique" && state.selectedOrg === "__all__";
+  let csvRows = [];
+
+  if (state.tab === "members") {
+    if (isUnique) {
+      csvRows = [["Login","Name","Email","Last Org Activity","Last Public Activity","Orgs","Roles","Profile URL"],
+        ...rows.map(m => [m.login, m.name, m.email,
+          m._lastActives?.map(a=>`${a.org}:${fmtDate(a.date)}`).join("; ")||"",
+          fmtDate(m.lastPublicEvent)||"",
+          m._orgs.join("; "), m._roles.map(r=>`${r.org}:${r.role}`).join("; "), m.html_url])];
+    } else {
+      csvRows = [["Org","Login","Name","Email","Last Org Activity","Last Public Activity","Role","Profile URL"],
+        ...rows.map(m => [m._org, m.login, m.name, m.email, fmtDate(m.lastOrgEvent)||"", fmtDate(m.lastPublicEvent)||"", m.role, m.html_url])];
+    }
+  } else if (state.tab === "collaborators") {
+    if (isUnique) {
+      csvRows = [["Login","Name","Email","Last Org Activity","Last Public Activity","Orgs","Profile URL"],
+        ...rows.map(c => [c.login, c.name, c.email,
+          c._lastActives?.map(a=>`${a.org}:${fmtDate(a.date)}`).join("; ")||"",
+          fmtDate(c.lastPublicEvent)||"",
+          c._orgs.join("; "), c.html_url])];
+    } else {
+      csvRows = [["Org","Login","Name","Email","Last Org Activity","Last Public Activity","Profile URL"],
+        ...rows.map(c => [c._org, c.login, c.name, c.email, fmtDate(c.lastOrgEvent)||"", fmtDate(c.lastPublicEvent)||"", c.html_url])];
+    }
+  } else if (state.tab === "teams") {
+    if (isUnique) {
+      csvRows = [["Team Name","Orgs","Unique Members Count","Member Logins"],
+        ...rows.map(t => [t.name, t._orgs.join("; "), t._uniqueMembers.length, t._uniqueMembers.map(m=>m.login).join("; ")])];
+    } else {
+      csvRows = [["Org","Team","Privacy","Permission","Members Count","Member Logins"],
+        ...rows.map(t => [t._org, t.name, t.privacy, t.permission, t.members?.length, t.members?.map(m=>m.login).join("; ")])];
+    }
+  } else if (state.tab === "orgs") {
+    const orgs = state.selectedOrg === "__all__" ? Object.keys(state.data) : [state.selectedOrg];
+    csvRows = [["Org","Plan","Created","Members","Collaborators","Teams"],
+      ...orgs.map(org => {
+        const info = state.orgInfo[org] || {};
+        return [org, info.plan?.name||"", fmtDate(info.created_at)||"",
+          state.data[org]?.members.length||0, state.data[org]?.collaborators.length||0, state.data[org]?.teams.length||0];
+      })];
+  }
+
+  const csv = csvRows.map(r => r.map(v=>`"${v??""}"`).join(",")).join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type:"text/csv" }));
+  a.download = `github-inventory-${state.tab}-${isUnique?"unique":"all"}-${Date.now()}.csv`;
+  a.click();
+}
+</script>
+</body>
+</html>
