@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>GitHub Org Inventory</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏢</text></svg>">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, sans-serif; background: #f3f4f6; color: #111; padding: 24px; }
@@ -16,22 +17,46 @@
     .field.token { flex: 2; min-width: 220px; }
     label { font-size: 12px; font-weight: 600; color: #374151; }
     label span { color: #9ca3af; font-weight: 400; }
-    textarea, input[type=password] { width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; font-family: monospace; }
+    textarea, #tokenInput { width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; font-family: monospace; }
+    .token-input-wrap { position: relative; }
+    .token-input-wrap #tokenInput { padding-right: 34px; }
+    .token-toggle { position: absolute; top: 50%; right: 6px; transform: translateY(-50%); background: none; border: none; cursor: pointer; padding: 2px 5px; line-height: 1; color: #6b7280; }
+    .token-toggle svg { display: block; }
+    .token-toggle:hover { color: #111827; }
     textarea { resize: vertical; }
     button.primary { padding: 9px 20px; background: #1d4ed8; color: #fff; border: none; border-radius: 6px; font-weight: 600; font-size: 14px; cursor: pointer; white-space: nowrap; }
     button.primary:disabled { background: #9ca3af; cursor: not-allowed; }
     button.primary:hover:not(:disabled) { background: #1e40af; }
+    .skip-activity-toggle { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 12px; font-weight: 600; color: #374151; cursor: pointer; width: fit-content; }
+    .skip-activity-toggle input { cursor: pointer; }
+    .skip-activity-toggle span { font-weight: 400; color: #9ca3af; }
+    .rate-limit-badge { font-size: 11px; color: #6b7280; margin-top: 8px; }
+    .rate-limit-badge.low { color: #b91c1c; font-weight: 600; }
     .status-pills { margin-top: 12px; display: flex; gap: 6px; flex-wrap: wrap; }
     .pill { font-size: 12px; padding: 3px 10px; border-radius: 99px; font-weight: 500; }
     .pill.ok { background: #d1fae5; color: #065f46; }
-    .pill.loading { background: #dbeafe; color: #1e40af; }
+    .pill.loading { background: #dbeafe; color: #1e40af; display: inline-flex; align-items: center; gap: 4px; }
+    .spinner-icon { animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
     .pill.error { background: #fee2e2; color: #b91c1c; }
-    .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; align-items: flex-end; }
-    .stat-card { flex: 1; min-width: 100px; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px 16px; }
+    .pill.partial { background: #fef9c3; color: #854d0e; }
+    .pill[data-tooltip] { position: relative; cursor: help; }
+    .pill[data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute; top: 100%; left: 0; margin-top: 6px;
+      background: #111827; color: #fff; padding: 6px 10px; border-radius: 6px;
+      font-size: 11px; font-weight: 500; white-space: pre-wrap; width: max-content; max-width: 320px;
+      z-index: 20; box-shadow: 0 4px 12px rgba(0,0,0,0.2); line-height: 1.5;
+    }
+    .stats { margin-bottom: 20px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 12px; }
+    .stat-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px 16px; }
+    .stat-card.clickable { cursor: pointer; }
+    .stat-card.clickable:hover { border-color: #93c5fd; }
     .stat-icon { font-size: 20px; }
     .stat-val { font-size: 24px; font-weight: 700; }
     .stat-label { font-size: 11px; color: #6b7280; }
-    .last-updated { font-size: 11px; color: #9ca3af; align-self: flex-end; padding-bottom: 4px; }
+    .last-updated { font-size: 11px; color: #9ca3af; text-align: right; margin-top: 8px; }
     .org-filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
     .org-filters span { font-size: 12px; font-weight: 600; color: #374151; }
     button.filter { padding: 4px 12px; border-radius: 99px; border: 1px solid #d1d5db; font-size: 12px; font-weight: 600; cursor: pointer; background: #fff; color: #374151; }
@@ -39,21 +64,53 @@
     .tabs { display: flex; gap: 4px; border-bottom: 2px solid #e5e7eb; margin-bottom: 14px; flex-wrap: wrap; }
     button.tab { padding: 8px 16px; border: none; background: none; cursor: pointer; font-size: 14px; color: #6b7280; border-bottom: 2px solid transparent; margin-bottom: -2px; }
     button.tab.active { font-weight: 700; color: #1d4ed8; border-bottom-color: #1d4ed8; }
-    .view-toggle { display: flex; border: 1px solid #d1d5db; border-radius: 6px; overflow: hidden; margin-bottom: 14px; width: fit-content; }
+    .toolbar-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+    .view-toggle { display: flex; border: 1px solid #d1d5db; border-radius: 6px; overflow: hidden; width: fit-content; }
     button.view-btn { padding: 6px 14px; border: none; background: #fff; color: #374151; font-size: 13px; font-weight: 600; cursor: pointer; }
     button.view-btn.active { background: #1d4ed8; color: #fff; }
     button.view-btn:not(:last-child) { border-right: 1px solid #d1d5db; }
     .badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; }
     .badge-count { background: #e5e7eb; color: #374151; font-size: 11px; padding: 1px 7px; border-radius: 99px; margin-left: 4px; }
-    .toolbar { display: flex; gap: 10px; margin-bottom: 14px; align-items: center; }
-    .toolbar input { flex: 1; padding: 7px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
+    .expand-btn { cursor: pointer; }
+    .expand-btn:hover { background: #d1d5db; }
+    .toolbar { display: flex; gap: 10px; align-items: center; justify-content: flex-end; margin-left: auto; }
     button.export { padding: 7px 14px; background: #fff; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; color: #374151; }
     button.export:hover { background: #f9fafb; }
-    .table-wrap { border: 1px solid #e5e7eb; border-radius: 10px; overflow: auto; }
-    table { width: 100%; border-collapse: collapse; font-size: 14px; }
-    th { padding: 10px 14px; text-align: left; font-weight: 600; color: #374151; font-size: 12px; border-bottom: 1px solid #e5e7eb; background: #f9fafb; white-space: nowrap; }
+    .columns-menu { position: relative; }
+    .columns-dropdown { position: absolute; top: calc(100% + 6px); right: 0; background: #fff; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); z-index: 30; min-width: 220px; max-height: 320px; overflow: auto; }
+    .columns-dropdown label { display: grid; grid-template-columns: 16px 1fr; align-items: center; column-gap: 10px; font-size: 13px; font-weight: 500; color: #374151; padding: 5px 6px; border-radius: 4px; cursor: pointer; white-space: nowrap; text-align: left; }
+    .columns-dropdown label:hover { background: #f3f4f6; }
+    .columns-dropdown input[type=checkbox] { cursor: pointer; margin: 0; }
+    .filter-icon-btn { background: none; border: none; border-radius: 4px; cursor: pointer; padding: 2px 4px; margin-left: 5px; color: #9ca3af; vertical-align: middle; line-height: 1; }
+    .filter-icon-btn svg { display: block; }
+    .filter-icon-btn:hover { color: #4b5563; background: #e5e7eb; }
+    .filter-icon-btn.active { color: #1d4ed8; background: #bfdbfe; }
+    th.col-filtered { background: #dbeafe; color: #1e40af; }
+    .sortable-label { cursor: pointer; user-select: none; }
+    .sortable-label:hover { text-decoration: underline; }
+    .active-filters-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .active-filters-bar:not(:empty) { margin-bottom: 12px; }
+    .filter-chip-label { font-size: 12px; font-weight: 600; color: #6b7280; }
+    .filter-chip { display: inline-flex; align-items: center; gap: 5px; background: #dbeafe; color: #1e40af; font-size: 12px; font-weight: 600; padding: 3px 6px 3px 10px; border-radius: 99px; }
+    .filter-chip button { background: none; border: none; cursor: pointer; color: #1e40af; font-size: 13px; line-height: 1; padding: 0 2px; }
+    .filter-chip button:hover { color: #111827; }
+    .clear-all-filters { background: none; border: none; cursor: pointer; color: #6b7280; font-size: 12px; font-weight: 600; text-decoration: underline; padding: 2px 4px; }
+    .clear-all-filters:hover { color: #111827; }
+    .filter-popover { position: fixed; background: #fff; border: 1px solid #d1d5db; border-radius: 8px; padding: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); z-index: 40; min-width: 200px; }
+    .filter-popover input[type=text] { width: 100%; box-sizing: border-box; padding: 6px 8px; font-size: 13px; border: 1px solid #d1d5db; border-radius: 6px; margin-bottom: 8px; font-weight: 400; }
+    .filter-popover input[type=text]:disabled { background: #f3f4f6; color: #9ca3af; }
+    .filter-popover select { width: 100%; box-sizing: border-box; padding: 6px 8px; font-size: 13px; border: 1px solid #d1d5db; border-radius: 6px; font-weight: 400; }
+    .filter-popover label.empty-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: #374151; margin-top: 8px; cursor: pointer; }
+    .filter-popover label.empty-toggle input { cursor: pointer; }
+    .table-wrap { border: 1px solid #e5e7eb; border-radius: 10px; overflow: auto; max-height: 72vh; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; background: #fff; }
+    th { padding: 10px 14px; text-align: left; font-weight: 600; color: #374151; font-size: 12px; border-bottom: 1px solid #e5e7eb; background: #f9fafb; white-space: nowrap; position: sticky; top: 0; z-index: 2; }
     td { padding: 8px 14px; vertical-align: middle; }
     tr:nth-child(even) td { background: #f9fafb; }
+    th:first-child, td:first-child { position: sticky; left: 0; z-index: 1; }
+    th:first-child { z-index: 3; }
+    td:first-child { background: #fff; }
+    tr:nth-child(even) td:first-child { background: #f9fafb; }
     td a { color: #1d4ed8; text-decoration: none; }
     td img { width: 28px; height: 28px; border-radius: 50%; vertical-align: middle; }
     .org-col { font-size: 12px; font-weight: 600; color: #6b7280; }
@@ -71,15 +128,25 @@
     .org-card-header img { width: 48px; height: 48px; border-radius: 10px; border: 1px solid #e5e7eb; }
     .org-card-header h2 { font-size: 16px; font-weight: 700; margin: 0; }
     .org-card-header a { font-size: 12px; color: #1d4ed8; }
+    .org-refresh-btn { margin-left: auto; padding: 7px 14px; background: #fff; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; color: #374151; white-space: nowrap; }
+    .org-refresh-btn:hover:not(:disabled) { background: #f9fafb; }
+    .org-refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .org-meta { display: flex; gap: 12px; flex-wrap: wrap; }
     .org-meta-item { flex: 1; min-width: 140px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 14px; }
     .org-meta-item[onclick]:hover { background: #eff6ff; border-color: #bfdbfe; }
     .org-meta-label { font-size: 11px; color: #6b7280; font-weight: 600; margin-bottom: 2px; }
     .org-meta-value { font-size: 14px; font-weight: 600; color: #111; }
     .empty { padding: 48px 24px; text-align: center; color: #9ca3af; border: 2px dashed #e5e7eb; border-radius: 12px; }
+    .search-result-row { cursor: pointer; }
+    .search-result-row:hover td { background: #eff6ff !important; }
     .empty-icon { font-size: 40px; margin-bottom: 12px; }
     .empty-title { font-size: 16px; font-weight: 600; color: #6b7280; margin-bottom: 6px; }
     .hidden { display: none; }
+    .note-banner { position: relative; font-size: 12px; color: #374151; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 8px 32px 8px 12px; margin-bottom: 14px; line-height: 1.5; }
+    .note-dismiss { position: absolute; top: 6px; right: 8px; background: none; border: none; cursor: pointer; color: #6b7280; font-size: 13px; line-height: 1; padding: 2px 4px; }
+    .note-dismiss:hover { color: #111827; }
+    .note-restore { background: #fff; border: 1px solid #d1d5db; border-radius: 99px; cursor: pointer; font-size: 13px; line-height: 1; padding: 4px 8px; }
+    .note-restore:hover { background: #f9fafb; }
   </style>
 </head>
 <body>
@@ -94,21 +161,30 @@
       <textarea id="orgInput" rows="3" placeholder="my-org&#10;another-org&#10;third-org"></textarea>
     </div>
     <div class="field token">
-      <label>Personal Access Token <span>(read:org — add repo scope for private repo activity)</span></label>
-      <input type="password" id="tokenInput" placeholder="ghp_..." />
+      <label>Personal Access Token <span>(read:org — add repo scope to see private repos & team repo access)</span></label>
+      <div class="token-input-wrap">
+        <input type="password" id="tokenInput" placeholder="ghp_..." />
+        <button type="button" class="token-toggle" id="tokenToggleBtn" onclick="toggleTokenVisibility()" title="Show token"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="7.2" width="10" height="7" rx="1.4" stroke="currentColor" stroke-width="1.3"/><path d="M5.2 7.2V5.3a2.8 2.8 0 0 1 5.6 0v1.9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
+      </div>
     </div>
     <button class="primary" id="fetchBtn" onclick="handleFetch()">Fetch Data</button>
   </div>
+  <label class="skip-activity-toggle"><input type="checkbox" id="skipActivityInput"> Skip activity timestamps <span>(faster — saves ~1 API call per member/collaborator, and the org audit-log call)</span></label>
   <div class="status-pills" id="statusPills"></div>
+  <div class="rate-limit-badge" id="rateLimitBadge"></div>
 </div>
 
 <div class="stats hidden" id="statsSection">
-  <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-val" id="statMembers">0</div><div class="stat-label">Total Members</div></div>
-  <div class="stat-card"><div class="stat-icon">🧍</div><div class="stat-val" id="statUniqueMembers">0</div><div class="stat-label">Unique Members</div></div>
-  <div class="stat-card"><div class="stat-icon">🔑</div><div class="stat-val" id="statAdmins">0</div><div class="stat-label">Admins</div></div>
-  <div class="stat-card"><div class="stat-icon">🤝</div><div class="stat-val" id="statCollabs">0</div><div class="stat-label">Collaborators</div></div>
-  <div class="stat-card"><div class="stat-icon">🏷️</div><div class="stat-val" id="statTeams">0</div><div class="stat-label">Teams</div></div>
-  <div class="stat-card"><div class="stat-icon">🏢</div><div class="stat-val" id="statOrgs">0</div><div class="stat-label">Orgs Loaded</div></div>
+  <div class="stats-grid">
+    <div class="stat-card clickable" onclick="jumpToStat('members',{view:'all'})"><div class="stat-icon">👥</div><div class="stat-val" id="statMembers">0</div><div class="stat-label">Total Members</div></div>
+    <div class="stat-card clickable" onclick="jumpToStat('members',{view:'unique'})"><div class="stat-icon">🧍</div><div class="stat-val" id="statUniqueMembers">0</div><div class="stat-label">Unique Members</div></div>
+    <div class="stat-card clickable" onclick="jumpToNoTeamMembers()"><div class="stat-icon">🚫</div><div class="stat-val" id="statNoTeam">0</div><div class="stat-label">Members w/o Team</div></div>
+    <div class="stat-card clickable" onclick="jumpToStat('members',{view:'all',filterCol:'role',filterVal:'admin'})"><div class="stat-icon">🔑</div><div class="stat-val" id="statAdmins">0</div><div class="stat-label">Admins</div></div>
+    <div class="stat-card clickable" onclick="jumpToStat('collaborators',{view:'unique'})"><div class="stat-icon">🤝</div><div class="stat-val" id="statCollabs">0</div><div class="stat-label">Collaborators</div></div>
+    <div class="stat-card clickable" onclick="jumpToStat('teams',{view:'unique'})"><div class="stat-icon">🏷️</div><div class="stat-val" id="statTeams">0</div><div class="stat-label">Teams</div></div>
+    <div class="stat-card clickable" onclick="jumpToStat('repos')"><div class="stat-icon">📦</div><div class="stat-val" id="statRepos">0</div><div class="stat-label">Repos</div></div>
+    <div class="stat-card clickable" onclick="jumpToStat('orgs')"><div class="stat-icon">🏢</div><div class="stat-val" id="statOrgs">0</div><div class="stat-label">Orgs Loaded</div></div>
+  </div>
   <div class="last-updated" id="lastUpdated"></div>
 </div>
 
@@ -116,21 +192,33 @@
 
 <div class="hidden" id="tableSection">
   <div class="tabs">
-    <button class="tab active" id="tab-orgs"          onclick="switchTab('orgs')">Org Dashboard <span class="badge-count" id="cnt-orgs">0</span></button>
+    <button class="tab active" id="tab-search"        onclick="switchTab('search')">🔍 Search</button>
+    <button class="tab"        id="tab-orgs"          onclick="switchTab('orgs')">Org Dashboard <span class="badge-count" id="cnt-orgs">0</span></button>
     <button class="tab"        id="tab-members"       onclick="switchTab('members')">Members <span class="badge-count" id="cnt-members">0</span></button>
     <button class="tab"        id="tab-collaborators" onclick="switchTab('collaborators')">Outside Collaborators <span class="badge-count" id="cnt-collaborators">0</span></button>
     <button class="tab"        id="tab-teams"         onclick="switchTab('teams')">Teams <span class="badge-count" id="cnt-teams">0</span></button>
+    <button class="tab"        id="tab-repos"         onclick="switchTab('repos')">Repos <span class="badge-count" id="cnt-repos">0</span></button>
   </div>
-  <div class="view-toggle" id="viewToggle" style="display:none">
-    <button class="view-btn active" id="view-all"    onclick="switchView('all')">All entries</button>
-    <button class="view-btn"        id="view-unique" onclick="switchView('unique')">Unique only</button>
+  <div class="toolbar-row">
+    <div class="view-toggle" id="viewToggle" style="display:none">
+      <button class="view-btn active" id="view-all"    onclick="switchView('all')">All entries</button>
+      <button class="view-btn"        id="view-unique" onclick="switchView('unique')">Unique only</button>
+    </div>
+    <div class="toolbar" id="toolbar">
+      <span id="noteRestoreArea"></span>
+      <div class="columns-menu" id="columnsMenu">
+        <button class="export" onclick="toggleColumnsMenu(event)">☰ Columns</button>
+        <div class="columns-dropdown hidden" id="columnsDropdown"></div>
+      </div>
+      <button class="export" onclick="exportCSV()">⬇ Export CSV</button>
+      <button class="export" onclick="exportJSON()" title="Full nested dump (members, collaborators, teams, repos, and the computed access relationships) — not tied to the current tab">⬇ Export JSON</button>
+    </div>
   </div>
-  <div class="toolbar" id="toolbar">
-    <input type="text" id="searchInput" placeholder="Search by username, name, email, or org…" oninput="renderTable()" />
-    <button class="export" onclick="exportCSV()">⬇ Export CSV</button>
-  </div>
+  <div class="active-filters-bar" id="activeFiltersBar"></div>
   <div class="table-wrap" id="tableWrap"></div>
 </div>
+
+<div class="filter-popover hidden" id="filterPopover"></div>
 
 <div class="empty" id="emptyState">
   <div class="empty-icon">🏢</div>
@@ -140,7 +228,110 @@
 
 <script>
 const BASE = "https://api.github.com";
-let state = { data: {}, orgInfo: {}, tab: "orgs", selectedOrg: "__all__", view: "all" };
+
+/* inline SVG icons — no external icon library, but stylable/consistent unlike emoji */
+const ICON_FUNNEL = `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1.5 2.5h13L9.5 8.5v5l-3 1.5v-6.5L1.5 2.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>`;
+const ICON_LOCK = `<svg width="15" height="15" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="7.2" width="10" height="7" rx="1.4" stroke="currentColor" stroke-width="1.3"/><path d="M5.2 7.2V5.3a2.8 2.8 0 0 1 5.6 0v1.9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`;
+const ICON_UNLOCK = `<svg width="15" height="15" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="7.2" width="10" height="7" rx="1.4" stroke="currentColor" stroke-width="1.3"/><path d="M5.2 7.2V5.3a2.8 2.8 0 0 1 5.3-1.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`;
+const ICON_SPINNER = `<svg class="spinner-icon" width="11" height="11" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-opacity="0.25" stroke-width="2"/><path d="M14.5 8a6.5 6.5 0 0 0-6.5-6.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+let state = { data: {}, orgInfo: {}, tab: "orgs", selectedOrg: "__all__", view: "all", hiddenCols: loadHiddenCols(), colFilters: {}, openFilterPopover: null, sortState: {}, rateLimit: null, dismissedNotes: loadDismissedNotes() };
+document.getElementById("orgInput").value = loadLastOrgs();
+
+/* ── column visibility (persisted locally — UI preference only, no token/secret ever stored here) ── */
+function loadHiddenCols() {
+  try {
+    const raw = localStorage.getItem("ghInventoryHiddenCols");
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    const out = {};
+    Object.entries(parsed).forEach(([k, arr]) => out[k] = new Set(arr));
+    return out;
+  } catch { return {}; }
+}
+
+function saveHiddenCols() {
+  try {
+    const plain = {};
+    Object.entries(state.hiddenCols).forEach(([k, set]) => plain[k] = [...set]);
+    localStorage.setItem("ghInventoryHiddenCols", JSON.stringify(plain));
+  } catch { /* localStorage unavailable — visibility just won't persist across reloads */ }
+}
+
+/* ── dismissible info banners (persisted — these describe permanent data-completeness limits, not one-off alerts) ── */
+function loadDismissedNotes() {
+  try {
+    const raw = localStorage.getItem("ghInventoryDismissedNotes");
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch { return new Set(); }
+}
+
+function saveDismissedNotes() {
+  try { localStorage.setItem("ghInventoryDismissedNotes", JSON.stringify([...state.dismissedNotes])); }
+  catch { /* localStorage unavailable — dismissal just won't persist across reloads */ }
+}
+
+/* ── remembered org list (org names only — never the token) ── */
+function loadLastOrgs() {
+  try { return localStorage.getItem("ghInventoryLastOrgs") || ""; }
+  catch { return ""; }
+}
+
+function saveLastOrgs(value) {
+  try { localStorage.setItem("ghInventoryLastOrgs", value); }
+  catch { /* localStorage unavailable — org list just won't persist across reloads */ }
+}
+
+function dismissNote(id) {
+  state.dismissedNotes.add(id);
+  saveDismissedNotes();
+  renderTable();
+}
+
+function restoreNote(id) {
+  state.dismissedNotes.delete(id);
+  saveDismissedNotes();
+  renderTable();
+}
+
+function noteBanner(id, html) {
+  if (state.dismissedNotes.has(id)) return ""; // restore icon lives in the toolbar row instead — see renderNoteRestoreArea()
+  return `<div class="note-banner">${html}<button type="button" class="note-dismiss" onclick="dismissNote('${id}')" title="Dismiss">✕</button></div>`;
+}
+
+/* keeps the dismissed-note restore icon(s) on the same line as Columns/Export, instead of adding
+   a line above the table only on tabs that happen to have a note — which made table position
+   inconsistent across tabs. */
+function renderNoteRestoreArea() {
+  const area = document.getElementById("noteRestoreArea");
+  if (!area) return;
+  const icons = [];
+  if (state.tab === "collaborators" && orgsInScope().some(o => state.data[o]?.collaboratorsBlocked) && state.dismissedNotes.has("collaborators-org-owner")) {
+    icons.push(`<button type="button" class="note-restore" onclick="restoreNote('collaborators-org-owner')" title="Show info">ℹ️</button>`);
+  }
+  if (state.tab === "repos" && state.dismissedNotes.has("repos-team-access-only")) {
+    icons.push(`<button type="button" class="note-restore" onclick="restoreNote('repos-team-access-only')" title="Show info">ℹ️</button>`);
+  }
+  area.innerHTML = icons.join("");
+}
+
+/* ── rate limit tracking (read from response headers already present on every GitHub API call — no extra requests) ── */
+function updateRateLimit(res) {
+  const remaining = res.headers?.get?.("x-ratelimit-remaining");
+  const limit = res.headers?.get?.("x-ratelimit-limit");
+  const reset = res.headers?.get?.("x-ratelimit-reset");
+  if (remaining == null) return;
+  state.rateLimit = { remaining: Number(remaining), limit: Number(limit), resetAt: reset ? new Date(Number(reset) * 1000) : null };
+  renderRateLimitBadge();
+}
+
+function renderRateLimitBadge() {
+  const el = document.getElementById("rateLimitBadge");
+  if (!el || !state.rateLimit) return;
+  const { remaining, limit, resetAt } = state.rateLimit;
+  const low = limit > 0 && remaining < Math.max(50, limit * 0.05);
+  el.className = "rate-limit-badge" + (low ? " low" : "");
+  el.textContent = `API rate limit: ${remaining}/${limit}${resetAt ? ` (resets ${resetAt.toLocaleTimeString()})` : ""}${low ? " — running low" : ""}`;
+}
 
 /* ── helpers ── */
 async function fetchAll(url, token, params = {}) {
@@ -150,6 +341,7 @@ async function fetchAll(url, token, params = {}) {
     const res = await fetch(`${url}?${q}`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" }
     });
+    updateRateLimit(res);
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const data = await res.json();
     if (!Array.isArray(data) || !data.length) break;
@@ -164,6 +356,7 @@ async function fetchOne(url, token) {
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" }
   });
+  updateRateLimit(res);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
@@ -182,6 +375,7 @@ async function fetchAuditMap(org, token) {
     const res = await fetch(`${BASE}/orgs/${org}/events?per_page=100`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" }
     });
+    updateRateLimit(res);
     if (!res.ok) return map;
     const events = await res.json();
     if (!Array.isArray(events)) return map;
@@ -199,10 +393,29 @@ async function fetchLastPublicEvent(login, token) {
     const res = await fetch(`${BASE}/users/${login}/events?per_page=1`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" }
     });
+    updateRateLimit(res);
     if (!res.ok) return "";
     const data = await res.json();
     return Array.isArray(data) && data.length ? data[0].created_at : "";
   } catch { return ""; }
+}
+
+/* ── permissions ──
+   GitHub exposes the same 5 permission tiers through two different vocabularies depending on
+   which endpoint you hit: classic (pull/push) on the team-list endpoint, modern (read/write) via
+   role_name on the team-repos endpoint. We display whichever GitHub actually returns, unaltered —
+   BADGE_COLORS below has entries for both vocabularies so coloring is consistent either way.
+   PERM_RANK needs both sets of keys too, since which one shows up depends on the endpoint. */
+const PERM_RANK = { pull: 1, read: 1, triage: 2, push: 3, write: 3, maintain: 4, admin: 5 };
+function permFromRepo(repo) {
+  if (repo.role_name) return repo.role_name;
+  const p = repo.permissions || {};
+  if (p.admin) return "admin";
+  if (p.maintain) return "maintain";
+  if (p.push) return "push";
+  if (p.triage) return "triage";
+  if (p.pull) return "pull";
+  return "";
 }
 
 /* ── org info ── */
@@ -212,18 +425,32 @@ async function fetchOrgInfo(org, token) {
 }
 
 /* ── fetch org data ── */
-async function fetchOrg(org, token) {
-  const [members, collaborators, teams, auditMap] = await Promise.all([
-    fetchAll(`${BASE}/orgs/${org}/members`, token, { role: "all" }),
-    fetchAll(`${BASE}/orgs/${org}/outside_collaborators`, token),
-    fetchAll(`${BASE}/orgs/${org}/teams`, token),
-    fetchAuditMap(org, token),
+async function safeFetchAll(url, token, params, label, warnings) {
+  try {
+    return await fetchAll(url, token, params);
+  } catch (e) {
+    warnings.push({ label, message: e.message });
+    return [];
+  }
+}
+
+async function fetchOrg(org, token, skipActivity) {
+  const warnings = [];
+  const [members, collaborators, teams, repos, auditMap] = await Promise.all([
+    safeFetchAll(`${BASE}/orgs/${org}/members`, token, { role: "all" }, "members", warnings),
+    safeFetchAll(`${BASE}/orgs/${org}/outside_collaborators`, token, {}, "outside collaborators (requires org owner)", warnings),
+    safeFetchAll(`${BASE}/orgs/${org}/teams`, token, {}, "teams", warnings),
+    safeFetchAll(`${BASE}/orgs/${org}/repos`, token, {}, "repos", warnings),
+    skipActivity ? Promise.resolve({}) : fetchAuditMap(org, token),
   ]);
 
   const teamsWithMembers = await Promise.all(
     teams.map(async t => {
-      const teamMembers = await fetchAll(`${BASE}/orgs/${org}/teams/${t.slug}/members`, token);
-      return { ...t, members: teamMembers };
+      const [teamMembers, teamRepos] = await Promise.all([
+        safeFetchAll(`${BASE}/orgs/${org}/teams/${t.slug}/members`, token, {}, `team "${t.slug}" members`, warnings),
+        safeFetchAll(`${BASE}/orgs/${org}/teams/${t.slug}/repos`, token, {}, `team "${t.slug}" repos`, warnings),
+      ]);
+      return { ...t, members: teamMembers, repos: teamRepos.map(r => ({ full_name: r.full_name, name: r.name, permission: permFromRepo(r) })) };
     })
   );
 
@@ -233,7 +460,7 @@ async function fetchOrg(org, token) {
         const [membership, profile, lastPublicEvent] = await Promise.all([
           fetchOne(`${BASE}/orgs/${org}/memberships/${m.login}`, token),
           fetchOne(`${BASE}/users/${m.login}`, token),
-          fetchLastPublicEvent(m.login, token),
+          skipActivity ? Promise.resolve("") : fetchLastPublicEvent(m.login, token),
         ]);
         return { ...m, role: membership.role, state: membership.state, name: profile.name || "", email: profile.email || "", lastOrgEvent: auditMap[m.login] || "", lastPublicEvent };
       } catch {
@@ -247,7 +474,7 @@ async function fetchOrg(org, token) {
       try {
         const [profile, lastPublicEvent] = await Promise.all([
           fetchOne(`${BASE}/users/${c.login}`, token),
-          fetchLastPublicEvent(c.login, token),
+          skipActivity ? Promise.resolve("") : fetchLastPublicEvent(c.login, token),
         ]);
         return { ...c, name: profile.name || "", email: profile.email || "", lastOrgEvent: auditMap[c.login] || "", lastPublicEvent };
       } catch {
@@ -256,23 +483,134 @@ async function fetchOrg(org, token) {
     })
   );
 
-  return { members: membersWithRoles, collaborators: collaboratorsWithProfile, teams: teamsWithMembers };
+  /* per-repo: which teams grant access at what level, and the unique user count that implies */
+  const repoRows = repos.map(r => {
+    const access = teamsWithMembers
+      .filter(t => (t.repos || []).some(tr => tr.full_name === r.full_name))
+      .map(t => ({ team: t.name, permission: (t.repos.find(tr => tr.full_name === r.full_name) || {}).permission }));
+    const userSet = new Set();
+    access.forEach(a => {
+      const team = teamsWithMembers.find(t => t.name === a.team);
+      (team?.members || []).forEach(m => userSet.add(m.login));
+    });
+    return { ...r, _teamAccess: access, _userCount: userSet.size };
+  });
+
+  /* per-user: every repo reachable via team membership, at the highest permission granted */
+  const userRepoAccess = {};
+  teamsWithMembers.forEach(t => {
+    (t.members || []).forEach(m => {
+      if (!userRepoAccess[m.login]) userRepoAccess[m.login] = {};
+      (t.repos || []).forEach(r => {
+        const cur = userRepoAccess[m.login][r.full_name];
+        if (!cur) {
+          userRepoAccess[m.login][r.full_name] = { permission: r.permission, teams: [t.name] };
+        } else {
+          cur.teams.push(t.name);
+          if ((PERM_RANK[r.permission] || 0) > (PERM_RANK[cur.permission] || 0)) cur.permission = r.permission;
+        }
+      });
+    });
+  });
+
+  /* per-user: every team they belong to */
+  const teamsByUser = {};
+  teamsWithMembers.forEach(t => {
+    (t.members || []).forEach(m => {
+      if (!teamsByUser[m.login]) teamsByUser[m.login] = [];
+      teamsByUser[m.login].push(t.name);
+    });
+  });
+
+  const ownerCount = membersWithRoles.filter(m => m.role === "admin").length;
+
+  /* outside_collaborators needs org-owner access — flagged both in the top pill (so it's
+     visible at a glance) and, in detail, on the Collaborators tab itself. */
+  const collaboratorsBlocked = warnings.some(w => w.label === "outside collaborators (requires org owner)");
+
+  return { members: membersWithRoles, collaborators: collaboratorsWithProfile, teams: teamsWithMembers, repos: repoRows, userRepoAccess, teamsByUser, ownerCount, collaboratorsBlocked, warnings };
+}
+
+function mergeRepoAccess(target, source) {
+  Object.entries(source || {}).forEach(([repo, info]) => {
+    const cur = target[repo];
+    if (!cur || (PERM_RANK[info.permission] || 0) > (PERM_RANK[cur.permission] || 0)) target[repo] = { ...info };
+  });
+}
+
+/* ── expandable truncated lists (click "+N more" / "Show less" to toggle) ── */
+function toggleTagList(el) {
+  const wrap = el.closest(".tag-toggle");
+  wrap.querySelectorAll(":scope > .tl-short, :scope > .tl-full").forEach(n => n.classList.toggle("hidden"));
+}
+
+function expandableTagList(items, renderItem, limit = 4) {
+  if (!items.length) return '<span style="color:#d1d5db">—</span>';
+  if (items.length <= limit) return `<div class="org-tags">${items.map(renderItem).join("")}</div>`;
+  const extra = items.length - limit;
+  const shortHtml = items.slice(0, limit).map(renderItem).join("");
+  const fullHtml = items.map(renderItem).join("");
+  return `<span class="tag-toggle">
+    <div class="org-tags tl-short">${shortHtml}<span class="badge-count expand-btn" onclick="toggleTagList(this)">+${extra} more</span></div>
+    <div class="org-tags tl-full hidden">${fullHtml}<span class="badge-count expand-btn" onclick="toggleTagList(this)">Show less</span></div>
+  </span>`;
+}
+
+function expandableTextList(items, limit = 5) {
+  if (!items.length) return '<span style="color:#d1d5db">—</span>';
+  if (items.length <= limit) return `<span style="font-size:12px;color:#6b7280">${items.join(", ")}</span>`;
+  const extra = items.length - limit;
+  const shortText = items.slice(0, limit).join(", ");
+  const fullText = items.join(", ");
+  return `<span class="tag-toggle" style="font-size:12px;color:#6b7280">
+    <span class="tl-short">${shortText} <span class="badge-count expand-btn" onclick="toggleTagList(this)">+${extra} more</span></span>
+    <span class="tl-full hidden">${fullText} <span class="badge-count expand-btn" onclick="toggleTagList(this)">Show less</span></span>
+  </span>`;
+}
+
+/* colors a "name: permission" tag by the permission's read/write risk, same palette as the badge() function */
+function permTag(label, permission) {
+  const s = BADGE_COLORS[(permission||"").toLowerCase()];
+  const style = s ? ` style="background:${s.split(";")[0]};color:${s.split(";")[1]}"` : "";
+  return `<span class="org-tag"${style}>${label}: ${permission || "?"}</span>`;
+}
+
+function repoAccessCell(access) {
+  const entries = Object.entries(access || {});
+  if (!entries.length) return '<span style="color:#d1d5db">—</span>';
+  return `<strong>${entries.length}</strong> ${expandableTagList(entries, ([repo, info]) => permTag(repo, info.permission))}`;
+}
+
+function teamAccessCell(access) {
+  return expandableTagList(access || [], a => permTag(a.team, a.permission));
+}
+
+function teamsCell(teams) {
+  return expandableTagList(teams || [], name => `<span class="org-tag">${name}</span>`);
 }
 
 /* ── ui helpers ── */
-function setPill(org, status, msg = "") {
+function setPill(org, status, detail = "") {
   const pills = document.getElementById("statusPills");
   let pill = document.getElementById(`pill-${CSS.escape(org)}`);
   if (!pill) { pill = document.createElement("span"); pill.id = `pill-${CSS.escape(org)}`; pills.appendChild(pill); }
   pill.className = `pill ${status}`;
-  pill.textContent = `${{ loading:"⏳", ok:"✓", error:"✗" }[status]} ${org}${msg ? " — " + msg : ""}`;
+  const icon = status === "loading" ? ICON_SPINNER : { ok:"✓", partial:"⚠", error:"✗" }[status];
+  pill.innerHTML = `${icon} ${escapeHtml(org)}`;
+  if (detail) pill.dataset.tooltip = detail; else delete pill.dataset.tooltip;
 }
 
 const BADGE_COLORS = {
-  admin:"#fef3c7;#92400e", member:"#dbeafe;#1e40af", owner:"#fce7f3;#9d174d",
+  member:"#dbeafe;#1e40af", owner:"#fce7f3;#9d174d",
   active:"#d1fae5;#065f46", pending:"#fef9c3;#854d0e", secret:"#f3f4f6;#374151",
-  closed:"#f3f4f6;#374151", pull:"#ede9fe;#5b21b6", push:"#dbeafe;#1e40af",
-  maintain:"#d1fae5;#065f46", triage:"#fef9c3;#854d0e",
+  closed:"#f3f4f6;#374151",
+  // permission level (member role, team default perm, and every team/repo access tag below), colored
+  // by read vs. write risk: cool blue/cyan = read-only, escalating amber→orange→red = write, more write = hotter.
+  // "admin" covers both org-admin role and admin-level repo/team permission — both mean highest privilege.
+  pull:"#dbeafe;#1e40af", read:"#dbeafe;#1e40af", triage:"#cffafe;#155e75",
+  push:"#e5e7eb;#374151", write:"#e5e7eb;#374151", maintain:"#ffedd5;#9a3412", admin:"#fee2e2;#b91c1c",
+  // repo visibility, colored by exposure risk (stoplight: restricted=green, org-wide=amber, world-visible=red)
+  private:"#d1fae5;#065f46", internal:"#fef9c3;#854d0e", public:"#fee2e2;#b91c1c",
 };
 function badge(label) {
   const s = BADGE_COLORS[(label||"").toLowerCase()] || "#e5e7eb;#374151";
@@ -304,12 +642,49 @@ function activityCellMulti(lastActives, lastPublicEvent) {
   return `<div class="activity-cell">${orgPart}${pub}</div>`;
 }
 
+function toggleTokenVisibility() {
+  const input = document.getElementById("tokenInput");
+  const btn = document.getElementById("tokenToggleBtn");
+  const nowShowing = input.type === "password";
+  input.type = nowShowing ? "text" : "password";
+  btn.innerHTML = nowShowing ? ICON_UNLOCK : ICON_LOCK;
+  btn.title = nowShowing ? "Hide token" : "Show token";
+}
+
 /* ── main fetch ── */
+async function fetchAndStoreOrg(org, token, skipActivity) {
+  try {
+    const [orgData, orgInfo] = await Promise.all([fetchOrg(org, token, skipActivity), fetchOrgInfo(org, token)]);
+    state.data[org] = orgData;
+    state.orgInfo[org] = orgInfo;
+    if (orgData.warnings.length) setPill(org, "partial", orgData.warnings.map(w => `${w.label}: ${w.message}`).join("; "));
+    else setPill(org, "ok");
+  } catch (e) {
+    setPill(org, "error", e.message);
+  }
+}
+
+async function refreshOrg(org) {
+  const token = document.getElementById("tokenInput").value;
+  const skipActivity = document.getElementById("skipActivityInput").checked;
+  if (!token) return;
+  const btn = document.getElementById(`refresh-btn-${org}`);
+  if (btn) { btn.disabled = true; btn.textContent = "Refreshing…"; }
+  setPill(org, "loading");
+  await fetchAndStoreOrg(org, token, skipActivity);
+  document.getElementById("lastUpdated").textContent = "Updated: " + new Date().toLocaleTimeString();
+  updateStats();
+  renderTable();
+}
+
 async function handleFetch() {
   const orgInput = document.getElementById("orgInput").value;
   const token = document.getElementById("tokenInput").value;
+  const skipActivity = document.getElementById("skipActivityInput").checked;
   const orgs = orgInput.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
   if (!orgs.length || !token) return;
+
+  saveLastOrgs(orgInput);
 
   document.getElementById("statusPills").innerHTML = "";
   document.getElementById("fetchBtn").disabled = true;
@@ -318,16 +693,7 @@ async function handleFetch() {
   state.selectedOrg = "__all__"; state.view = "all";
 
   orgs.forEach(org => setPill(org, "loading"));
-  await Promise.allSettled(orgs.map(async org => {
-    try {
-      const [orgData, orgInfo] = await Promise.all([fetchOrg(org, token), fetchOrgInfo(org, token)]);
-      state.data[org] = orgData;
-      state.orgInfo[org] = orgInfo;
-      setPill(org, "ok");
-    } catch (e) {
-      setPill(org, "error", e.message);
-    }
-  }));
+  await Promise.allSettled(orgs.map(org => fetchAndStoreOrg(org, token, skipActivity)));
 
   document.getElementById("lastUpdated").textContent = "Updated: " + new Date().toLocaleTimeString();
   document.getElementById("fetchBtn").disabled = false;
@@ -335,7 +701,7 @@ async function handleFetch() {
   document.getElementById("cnt-orgs").textContent = Object.keys(state.data).length;
   updateStats();
   renderOrgFilters();
-  switchTab("orgs");
+  switchTab("search");
   document.getElementById("statsSection").classList.remove("hidden");
   document.getElementById("orgFilters").classList.remove("hidden");
   document.getElementById("tableSection").classList.remove("hidden");
@@ -350,13 +716,16 @@ function updateStats() {
   const uniqueM = new Set(d.flatMap(o => o.members.map(m => m.login))).size;
   document.getElementById("statMembers").textContent = totalM;
   document.getElementById("statUniqueMembers").textContent = uniqueM;
+  document.getElementById("statNoTeam").textContent = new Set(d.flatMap(o => o.members.filter(m => !o.teamsByUser?.[m.login]).map(m => m.login))).size;
   document.getElementById("statAdmins").textContent = d.reduce((a,o) => a + o.members.filter(m => m.role==="admin").length, 0);
   document.getElementById("statCollabs").textContent = new Set(d.flatMap(o => o.collaborators.map(c => c.login))).size;
   document.getElementById("statTeams").textContent = new Set(d.flatMap(o => o.teams.map(t => t.name))).size;
+  document.getElementById("statRepos").textContent = d.reduce((a,o) => a + o.repos.length, 0);
   document.getElementById("statOrgs").textContent = orgs.length;
   document.getElementById("cnt-members").textContent = totalM;
   document.getElementById("cnt-collaborators").textContent = d.reduce((a,o) => a + o.collaborators.length, 0);
   document.getElementById("cnt-teams").textContent = d.reduce((a,o) => a + o.teams.length, 0);
+  document.getElementById("cnt-repos").textContent = d.reduce((a,o) => a + o.repos.length, 0);
 }
 
 /* ── org filters ── */
@@ -370,7 +739,7 @@ function renderOrgFilters() {
     btn.onclick = () => {
       state.selectedOrg = org;
       const isAll = org === "__all__";
-      document.getElementById("viewToggle").style.display = (isAll && state.tab !== "orgs" && state.tab !== "teams") ? "" : "none";
+      document.getElementById("viewToggle").style.display = (isAll && (state.tab === "members" || state.tab === "collaborators")) ? "" : "none";
       renderOrgFilters();
       updateStats();
       renderTable();
@@ -388,14 +757,94 @@ function jumpToTab(org, tab) {
   switchTab(tab);
 }
 
+/* generic stat-card -> tab (+ optional view / column filter) navigation. Preserves the
+   current org scope (state.selectedOrg) — a stat card never changes which org(s) you're looking at. */
+function jumpToStat(tab, opts = {}) {
+  if (opts.view) state.view = opts.view;
+  switchTab(tab);
+  if (opts.filterCol) {
+    const colsKey = currentColsKey();
+    if (colsKey) onColFilterChange(colsKey, opts.filterCol, opts.filterVal);
+  }
+}
+
+function jumpToNoTeamMembers() {
+  jumpToStat("members", { filterCol: "teams", filterVal: EMPTY_SENTINEL });
+}
+
+/* ── global search (across members, collaborators, teams, repos) ── */
+const SEARCH_TYPE_LABEL = { member:"Member", collaborator:"Collaborator", team:"Team", repo:"Repo" };
+
+function searchAll(query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const results = [];
+  Object.keys(state.data).forEach(org => {
+    const d = state.data[org];
+    if (!d) return;
+    (d.members || []).forEach(m => {
+      if ([m.login, m.name, m.email].some(v => v && v.toLowerCase().includes(q)))
+        results.push({ type:"member", label:m.login, sub:m.name||m.email||"", org, tab:"members", filterCol:"login", filterVal:m.login });
+    });
+    (d.collaborators || []).forEach(c => {
+      if ([c.login, c.name, c.email].some(v => v && v.toLowerCase().includes(q)))
+        results.push({ type:"collaborator", label:c.login, sub:c.name||c.email||"", org, tab:"collaborators", filterCol:"login", filterVal:c.login });
+    });
+    (d.teams || []).forEach(t => {
+      if (t.name && t.name.toLowerCase().includes(q))
+        results.push({ type:"team", label:t.name, sub:`${t.members?.length??0} member(s)`, org, tab:"teams", filterCol:"name", filterVal:t.name });
+    });
+    (d.repos || []).forEach(r => {
+      if (r.name && r.name.toLowerCase().includes(q))
+        results.push({ type:"repo", label:r.name, sub:r.visibility||(r.private?"private":"public"), org, tab:"repos", filterCol:"name", filterVal:r.name });
+    });
+  });
+  return results;
+}
+
+function renderSearchResults() {
+  const input = document.getElementById("globalSearchInput");
+  const wrap = document.getElementById("searchResultsWrap");
+  if (!input || !wrap) return;
+  const query = input.value;
+  if (!query.trim()) {
+    wrap.innerHTML = `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">Search across everything</div><div>Type a login, name, email, team, or repo name to jump straight to it.</div></div>`;
+    return;
+  }
+  const results = searchAll(query);
+  if (!results.length) {
+    wrap.innerHTML = `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">No matches</div><div>No members, collaborators, teams, or repos match "${escapeHtml(query)}".</div></div>`;
+    return;
+  }
+  wrap.innerHTML = `<div class="table-wrap"><table>
+    <thead><tr><th>Type</th><th>Match</th><th>Detail</th><th>Org</th></tr></thead>
+    <tbody>${results.map(r => {
+      const encodedVal = encodeURIComponent(r.filterVal).replace(/'/g, "%27");
+      return `<tr class="search-result-row" onclick="jumpToSearchResult('${r.org}','${r.tab}','${r.filterCol}','${encodedVal}')">
+        <td>${badge(SEARCH_TYPE_LABEL[r.type])}</td>
+        <td><strong>${escapeHtml(r.label)}</strong></td>
+        <td style="color:#6b7280">${escapeHtml(r.sub)}</td>
+        <td class="org-col">${escapeHtml(r.org)}</td>
+      </tr>`;
+    }).join("")}</tbody>
+  </table></div>`;
+}
+
+function jumpToSearchResult(org, tab, filterCol, encodedFilterVal) {
+  const filterVal = decodeURIComponent(encodedFilterVal);
+  state.selectedOrg = org;
+  renderOrgFilters();
+  updateStats();
+  jumpToStat(tab, { filterCol, filterVal });
+}
+
 function switchTab(tab) {
   state.tab = tab;
   document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
   document.getElementById(`tab-${tab}`).classList.add("active");
   const showToggle = (tab === "members" || tab === "collaborators") && state.selectedOrg === "__all__";
   document.getElementById("viewToggle").style.display = showToggle ? "" : "none";
-  document.getElementById("toolbar").style.display = tab === "orgs" ? "none" : "";
-  if (document.getElementById("searchInput")) document.getElementById("searchInput").value = "";
+  document.getElementById("toolbar").style.display = (tab === "orgs" || tab === "search") ? "none" : "";
   renderTable();
 }
 
@@ -409,7 +858,6 @@ function switchView(view) {
 /* ── get rows ── */
 function getRows() {
   const orgs = state.selectedOrg === "__all__" ? Object.keys(state.data) : [state.selectedOrg];
-  const search = (document.getElementById("searchInput")?.value || "").toLowerCase();
   const isUnique = state.view === "unique" && state.selectedOrg === "__all__";
   let rows = [];
 
@@ -418,18 +866,22 @@ function getRows() {
       const map = {};
       orgs.forEach(org => {
         (state.data[org]?.members || []).forEach(m => {
-          if (!map[m.login]) map[m.login] = { ...m, _orgs:[], _roles:[], _lastActives:[], lastPublicEvent: m.lastPublicEvent };
+          if (!map[m.login]) map[m.login] = { ...m, _orgs:[], _roles:[], _lastActives:[], lastPublicEvent: m.lastPublicEvent, _repoAccess: {}, _teamsSet: new Set() };
           map[m.login]._orgs.push(org);
           map[m.login]._roles.push({ org, role: m.role });
           if (m.lastOrgEvent) map[m.login]._lastActives.push({ org, date: m.lastOrgEvent });
           if (m.lastPublicEvent && (!map[m.login].lastPublicEvent || m.lastPublicEvent > map[m.login].lastPublicEvent))
             map[m.login].lastPublicEvent = m.lastPublicEvent;
+          mergeRepoAccess(map[m.login]._repoAccess, state.data[org]?.userRepoAccess?.[m.login]);
+          (state.data[org]?.teamsByUser?.[m.login] || []).forEach(t => map[m.login]._teamsSet.add(t));
         });
       });
-      rows = Object.values(map);
+      rows = Object.values(map).map(m => ({ ...m, _teamsList: [...m._teamsSet] }));
     } else {
-      rows = orgs.flatMap(org => (state.data[org]?.members || []).map(m => ({ ...m, _org: org })));
+      rows = orgs.flatMap(org => (state.data[org]?.members || []).map(m => ({ ...m, _org: org, _repoAccess: state.data[org]?.userRepoAccess?.[m.login] || {}, _teamsList: state.data[org]?.teamsByUser?.[m.login] || [] })));
     }
+  } else if (state.tab === "repos") {
+    rows = orgs.flatMap(org => (state.data[org]?.repos || []).map(r => ({ ...r, _org: org })));
   } else if (state.tab === "collaborators") {
     if (isUnique) {
       const map = {};
@@ -451,25 +903,19 @@ function getRows() {
       const map = {};
       orgs.forEach(org => {
         (state.data[org]?.teams || []).forEach(t => {
-          if (!map[t.name]) map[t.name] = { ...t, _orgs:[], _allMembers: new Map() };
+          if (!map[t.name]) map[t.name] = { ...t, _orgs:[], _allMembers: new Map(), _allRepos: new Map() };
           map[t.name]._orgs.push(org);
           (t.members||[]).forEach(m => map[t.name]._allMembers.set(m.login, m));
+          (t.repos||[]).forEach(r => map[t.name]._allRepos.set(r.full_name, r));
         });
       });
-      rows = Object.values(map).map(t => ({ ...t, _uniqueMembers: [...t._allMembers.values()] }));
+      rows = Object.values(map).map(t => ({ ...t, _uniqueMembers: [...t._allMembers.values()], _uniqueRepos: [...t._allRepos.values()] }));
     } else {
       rows = orgs.flatMap(org => (state.data[org]?.teams || []).map(t => ({ ...t, _org: org })));
     }
   }
 
-  if (!search) return rows;
-  return rows.filter(r =>
-    r.login?.toLowerCase().includes(search) ||
-    r.name?.toLowerCase().includes(search) ||
-    r.email?.toLowerCase().includes(search) ||
-    r._org?.toLowerCase().includes(search) ||
-    r._orgs?.some(o => o.toLowerCase().includes(search))
-  );
+  return rows;
 }
 
 /* ── render ── */
@@ -477,6 +923,21 @@ function renderTable() {
   const wrap = document.getElementById("tableWrap");
   const t = state.tab;
   const isUnique = state.view === "unique" && state.selectedOrg === "__all__";
+  closeFilterPopover(); // a full table rebuild invalidates any open popover's anchor position
+  renderActiveFiltersBar();
+  renderNoteRestoreArea();
+
+  if (t === "search") {
+    wrap.style.border = "none";
+    const currentQuery = document.getElementById("globalSearchInput")?.value || "";
+    wrap.innerHTML = `
+      <div class="card" style="margin-bottom:16px">
+        <input type="text" id="globalSearchInput" placeholder="Search members, collaborators, teams, and repos by name, login, or email…" value="${escapeHtml(currentQuery)}" oninput="renderSearchResults()" style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:15px;">
+      </div>
+      <div id="searchResultsWrap"></div>`;
+    renderSearchResults();
+    return;
+  }
 
   if (t === "orgs") {
     const orgs = state.selectedOrg === "__all__" ? Object.keys(state.data) : [state.selectedOrg];
@@ -494,12 +955,14 @@ function renderTable() {
             <h2>${info.name || org} &nbsp;<span class="badge" style="background:${pbg};color:${pc}">${plan}</span></h2>
             <a href="${info.html_url}" target="_blank">@${org} ↗</a>
           </div>
+          <button type="button" class="org-refresh-btn" id="refresh-btn-${org}" onclick="refreshOrg('${org}')" title="Refetch just this org">↻ Refresh</button>
         </div>
         <div class="org-meta">
           <div class="org-meta-item"><div class="org-meta-label">Created</div><div class="org-meta-value">${fmtDate(info.created_at) || "—"}</div></div>
           <div class="org-meta-item" onclick="jumpToTab('${org}','members')" style="cursor:pointer"><div class="org-meta-label">Members</div><div class="org-meta-value" style="color:#1d4ed8">${state.data[org]?.members.length ?? "—"}</div></div>
           <div class="org-meta-item" onclick="jumpToTab('${org}','collaborators')" style="cursor:pointer"><div class="org-meta-label">Collaborators</div><div class="org-meta-value" style="color:#1d4ed8">${state.data[org]?.collaborators.length ?? "—"}</div></div>
           <div class="org-meta-item" onclick="jumpToTab('${org}','teams')" style="cursor:pointer"><div class="org-meta-label">Teams</div><div class="org-meta-value" style="color:#1d4ed8">${state.data[org]?.teams.length ?? "—"}</div></div>
+          <div class="org-meta-item" onclick="jumpToTab('${org}','repos')" style="cursor:pointer"><div class="org-meta-label">Repos</div><div class="org-meta-value" style="color:#1d4ed8">${state.data[org]?.repos.length ?? "—"}</div></div>
         </div>
       </div>`;
     }).join("")}</div>`;
@@ -508,108 +971,388 @@ function renderTable() {
 
   wrap.style.border = "1px solid #e5e7eb";
   const rows = getRows();
+  renderColumnsMenu();
 
   if (t === "members") {
-    if (isUnique) {
-      wrap.innerHTML = `<table>
-        <thead><tr><th>Avatar</th><th>Login</th><th>Name</th><th>Email</th><th>Last Activity</th><th>Orgs & Roles</th><th>Profile</th></tr></thead>
-        <tbody>${rows.map(m => `<tr>
-          <td><img src="${m.avatar_url}" alt=""></td>
-          <td><strong>${m.login}</strong></td>
-          <td>${m.name||'<span style="color:#d1d5db">—</span>'}</td>
-          <td>${m.email||'<span style="color:#d1d5db">—</span>'}</td>
-          <td>${activityCellMulti(m._lastActives, m.lastPublicEvent)}</td>
-          <td><div class="org-tags">${m._roles.map(r => `<span class="org-tag">${r.org}: ${r.role}</span>`).join("")}</div></td>
-          <td><a href="${m.html_url}" target="_blank">View ↗</a></td>
-        </tr>`).join("") || `<tr><td colspan="7" style="padding:24px;text-align:center;color:#9ca3af">No results</td></tr>`}
-        </tbody></table>`;
-    } else {
-      wrap.innerHTML = `<table>
-        <thead><tr><th>Org</th><th>Avatar</th><th>Login</th><th>Name</th><th>Email</th><th>Last Activity</th><th>Role</th><th>Profile</th></tr></thead>
-        <tbody>${rows.map(m => `<tr>
-          <td class="org-col">${m._org}</td>
-          <td><img src="${m.avatar_url}" alt=""></td>
-          <td><strong>${m.login}</strong></td>
-          <td>${m.name||'<span style="color:#d1d5db">—</span>'}</td>
-          <td>${m.email||'<span style="color:#d1d5db">—</span>'}</td>
-          <td>${activityCell(m.lastOrgEvent, m.lastPublicEvent)}</td>
-          <td>${badge(m.role)}</td>
-          <td><a href="${m.html_url}" target="_blank">View ↗</a></td>
-        </tr>`).join("") || `<tr><td colspan="8" style="padding:24px;text-align:center;color:#9ca3af">No results</td></tr>`}
-        </tbody></table>`;
-    }
+    wrap.innerHTML = renderColumnTable(rows, isUnique ? "members-unique" : "members-all", emptyMessageForTab(t));
   } else if (t === "collaborators") {
-    if (isUnique) {
-      wrap.innerHTML = `<table>
-        <thead><tr><th>Avatar</th><th>Login</th><th>Name</th><th>Email</th><th>Last Activity</th><th>Orgs</th><th>Profile</th></tr></thead>
-        <tbody>${rows.map(c => `<tr>
-          <td><img src="${c.avatar_url}" alt=""></td>
-          <td><strong>${c.login}</strong></td>
-          <td>${c.name||'<span style="color:#d1d5db">—</span>'}</td>
-          <td>${c.email||'<span style="color:#d1d5db">—</span>'}</td>
-          <td>${activityCellMulti(c._lastActives, c.lastPublicEvent)}</td>
-          <td>${orgTags(c._orgs)}</td>
-          <td><a href="${c.html_url}" target="_blank">View ↗</a></td>
-        </tr>`).join("") || `<tr><td colspan="7" style="padding:24px;text-align:center;color:#9ca3af">No outside collaborators found</td></tr>`}
-        </tbody></table>`;
-    } else {
-      wrap.innerHTML = `<table>
-        <thead><tr><th>Org</th><th>Avatar</th><th>Login</th><th>Name</th><th>Email</th><th>Last Activity</th><th>Profile</th></tr></thead>
-        <tbody>${rows.map(c => `<tr>
-          <td class="org-col">${c._org}</td>
-          <td><img src="${c.avatar_url}" alt=""></td>
-          <td><strong>${c.login}</strong></td>
-          <td>${c.name||'<span style="color:#d1d5db">—</span>'}</td>
-          <td>${c.email||'<span style="color:#d1d5db">—</span>'}</td>
-          <td>${activityCell(c.lastOrgEvent, c.lastPublicEvent)}</td>
-          <td><a href="${c.html_url}" target="_blank">View ↗</a></td>
-        </tr>`).join("") || `<tr><td colspan="7" style="padding:24px;text-align:center;color:#9ca3af">No outside collaborators found</td></tr>`}
-        </tbody></table>`;
-    }
+    const blockedOrgs = orgsInScope().filter(o => state.data[o]?.collaboratorsBlocked);
+    const banner = blockedOrgs.length
+      ? noteBanner("collaborators-org-owner", `ℹ️ Listing outside collaborators requires organization <strong>owner</strong> access, which your token doesn't have for: <strong>${blockedOrgs.join(", ")}</strong>. This isn't a transient error — it won't resolve on retry. This tab will show none for ${blockedOrgs.length>1?"those orgs":"that org"} regardless of whether collaborators actually exist; ask an org owner to run this, or use a token they've granted owner-equivalent access to.`)
+      : "";
+    wrap.innerHTML = banner + renderColumnTable(rows, isUnique ? "collaborators-unique" : "collaborators-all", emptyMessageForTab(t));
   } else if (t === "teams") {
-    if (isUnique) {
-      wrap.innerHTML = `<table>
-        <thead><tr><th>Team Name</th><th>Appears in Orgs</th><th>Unique Members</th><th>Member Logins</th></tr></thead>
-        <tbody>${rows.map(t => `<tr>
-          <td><strong>${t.name}</strong></td>
-          <td>${orgTags(t._orgs)}</td>
-          <td>${t._uniqueMembers.length}</td>
-          <td style="font-size:12px;color:#6b7280">${t._uniqueMembers.slice(0,5).map(m=>m.login).join(", ")}${t._uniqueMembers.length>5?` +${t._uniqueMembers.length-5} more`:""}</td>
-        </tr>`).join("") || `<tr><td colspan="4" style="padding:24px;text-align:center;color:#9ca3af">No teams found</td></tr>`}
-        </tbody></table>`;
-    } else {
-      wrap.innerHTML = `<table>
-        <thead><tr><th>Org</th><th>Team</th><th>Privacy</th><th>Permission</th><th>Members</th><th>Member Logins</th></tr></thead>
-        <tbody>${rows.map(t => `<tr>
-          <td class="org-col">${t._org}</td>
-          <td><strong>${t.name}</strong></td>
-          <td>${badge(t.privacy)}</td>
-          <td>${badge(t.permission)}</td>
-          <td>${t.members?.length??0}</td>
-          <td style="font-size:12px;color:#6b7280">${(t.members?.slice(0,5).map(m=>m.login).join(", ")||"")}${t.members?.length>5?` +${t.members.length-5} more`:""}</td>
-        </tr>`).join("") || `<tr><td colspan="6" style="padding:24px;text-align:center;color:#9ca3af">No teams found</td></tr>`}
-        </tbody></table>`;
-    }
+    wrap.innerHTML = renderColumnTable(rows, isUnique ? "teams-unique" : "teams-all", emptyMessageForTab(t));
+  } else if (t === "repos") {
+    const ownerCount = orgsInScope().reduce((a, org) => a + (state.data[org]?.ownerCount || 0), 0);
+    const banner = noteBanner("repos-team-access-only", `ℹ️ Team Access reflects only repo grants made through teams. Direct collaborators added to a repo outside any team aren't visible here (listing them requires push/admin rights on that specific repo). Separately, ${ownerCount} org owner(s) across the selected org(s) have implicit admin on every repo, regardless of team grants.`);
+    wrap.innerHTML = banner + renderColumnTable(rows, "repos", emptyMessageForTab(t));
   }
+}
+
+/* ── column definitions: key, label, optional tdClass, render(row) ── */
+/* filter.type: "text" (substring, case-insensitive) or "select" (exact match, options built from the
+   current rows). Columns with no `filter` (avatar/profile/link/counts) aren't filterable — nothing to
+   match against, or matching a raw number isn't useful. */
+const TXT = value => ({ type:"text", value });
+const SEL = value => ({ type:"select", value });
+const COLUMNS = {
+  "members-unique": [
+    { key:"avatar", label:"Avatar", render:m=>`<img src="${m.avatar_url}" alt="">` },
+    { key:"login", label:"Login", render:m=>`<strong>${m.login}</strong>`, filter:TXT(m=>m.login), filterNoEmpty:true, sort:m=>m.login||"" },
+    { key:"name", label:"Name", render:m=>m.name||'<span style="color:#d1d5db">—</span>', filter:TXT(m=>m.name), sort:m=>m.name||"" },
+    { key:"email", label:"Email", render:m=>m.email||'<span style="color:#d1d5db">—</span>', filter:TXT(m=>m.email), sort:m=>m.email||"" },
+    { key:"activity", label:"Last Activity", render:m=>activityCellMulti(m._lastActives, m.lastPublicEvent), sort:m=>m.lastPublicEvent||"" },
+    { key:"rolesOrgs", label:"Orgs & Roles", render:m=>`<div class="org-tags">${m._roles.map(r=>`<span class="org-tag">${r.org}: ${r.role}</span>`).join("")}</div>`, filter:TXT(m=>m._roles.map(r=>`${r.org} ${r.role}`)), filterNoEmpty:true, sort:m=>m._roles.length },
+    { key:"teams", label:"Teams", render:m=>teamsCell(m._teamsList), filter:TXT(m=>(m._teamsList||[])), sort:m=>(m._teamsList||[]).length },
+    { key:"repoAccess", label:"Repo Access (via teams)", render:m=>repoAccessCell(m._repoAccess), filter:TXT(m=>Object.entries(m._repoAccess||{}).map(([r,i])=>`${r} ${i.permission}`)), sort:m=>Object.keys(m._repoAccess||{}).length },
+    { key:"profile", label:"Profile", render:m=>`<a href="${m.html_url}" target="_blank">View ↗</a>` },
+  ],
+  "members-all": [
+    { key:"org", label:"Org", tdClass:"org-col", render:m=>m._org, filter:SEL(m=>m._org), filterNoEmpty:true, sort:m=>m._org||"" },
+    { key:"avatar", label:"Avatar", render:m=>`<img src="${m.avatar_url}" alt="">` },
+    { key:"login", label:"Login", render:m=>`<strong>${m.login}</strong>`, filter:TXT(m=>m.login), filterNoEmpty:true, sort:m=>m.login||"" },
+    { key:"name", label:"Name", render:m=>m.name||'<span style="color:#d1d5db">—</span>', filter:TXT(m=>m.name), sort:m=>m.name||"" },
+    { key:"email", label:"Email", render:m=>m.email||'<span style="color:#d1d5db">—</span>', filter:TXT(m=>m.email), sort:m=>m.email||"" },
+    { key:"activity", label:"Last Activity", render:m=>activityCell(m.lastOrgEvent, m.lastPublicEvent), sort:m=>m.lastOrgEvent||"" },
+    { key:"role", label:"Role", render:m=>badge(m.role), filter:SEL(m=>m.role), filterNoEmpty:true, sort:m=>m.role||"" },
+    { key:"teams", label:"Teams", render:m=>teamsCell(m._teamsList), filter:TXT(m=>(m._teamsList||[])), sort:m=>(m._teamsList||[]).length },
+    { key:"repoAccess", label:"Repo Access (via teams)", render:m=>repoAccessCell(m._repoAccess), filter:TXT(m=>Object.entries(m._repoAccess||{}).map(([r,i])=>`${r} ${i.permission}`)), sort:m=>Object.keys(m._repoAccess||{}).length },
+    { key:"profile", label:"Profile", render:m=>`<a href="${m.html_url}" target="_blank">View ↗</a>` },
+  ],
+  "collaborators-unique": [
+    { key:"avatar", label:"Avatar", render:c=>`<img src="${c.avatar_url}" alt="">` },
+    { key:"login", label:"Login", render:c=>`<strong>${c.login}</strong>`, filter:TXT(c=>c.login), filterNoEmpty:true, sort:c=>c.login||"" },
+    { key:"name", label:"Name", render:c=>c.name||'<span style="color:#d1d5db">—</span>', filter:TXT(c=>c.name), sort:c=>c.name||"" },
+    { key:"email", label:"Email", render:c=>c.email||'<span style="color:#d1d5db">—</span>', filter:TXT(c=>c.email), sort:c=>c.email||"" },
+    { key:"activity", label:"Last Activity", render:c=>activityCellMulti(c._lastActives, c.lastPublicEvent), sort:c=>c.lastPublicEvent||"" },
+    { key:"orgs", label:"Orgs", render:c=>orgTags(c._orgs), filter:TXT(c=>(c._orgs||[])), filterNoEmpty:true, sort:c=>(c._orgs||[]).length },
+    { key:"profile", label:"Profile", render:c=>`<a href="${c.html_url}" target="_blank">View ↗</a>` },
+  ],
+  "collaborators-all": [
+    { key:"org", label:"Org", tdClass:"org-col", render:c=>c._org, filter:SEL(c=>c._org), filterNoEmpty:true, sort:c=>c._org||"" },
+    { key:"avatar", label:"Avatar", render:c=>`<img src="${c.avatar_url}" alt="">` },
+    { key:"login", label:"Login", render:c=>`<strong>${c.login}</strong>`, filter:TXT(c=>c.login), filterNoEmpty:true, sort:c=>c.login||"" },
+    { key:"name", label:"Name", render:c=>c.name||'<span style="color:#d1d5db">—</span>', filter:TXT(c=>c.name), sort:c=>c.name||"" },
+    { key:"email", label:"Email", render:c=>c.email||'<span style="color:#d1d5db">—</span>', filter:TXT(c=>c.email), sort:c=>c.email||"" },
+    { key:"activity", label:"Last Activity", render:c=>activityCell(c.lastOrgEvent, c.lastPublicEvent), sort:c=>c.lastOrgEvent||"" },
+    { key:"profile", label:"Profile", render:c=>`<a href="${c.html_url}" target="_blank">View ↗</a>` },
+  ],
+  "teams-unique": [
+    { key:"name", label:"Team Name", render:t=>`<strong>${t.name}</strong>`, filter:TXT(t=>t.name), filterNoEmpty:true, sort:t=>t.name||"" },
+    { key:"orgs", label:"Appears in Orgs", render:t=>orgTags(t._orgs), filter:SEL(t=>t._orgs), filterNoEmpty:true, sort:t=>(t._orgs||[]).length },
+    { key:"memberCount", label:"Unique Members", render:t=>t._uniqueMembers.length, sort:t=>t._uniqueMembers.length },
+    { key:"memberLogins", label:"Member Logins", render:t=>expandableTextList(t._uniqueMembers.map(m=>m.login)), filter:TXT(t=>t._uniqueMembers.map(m=>m.login)), sort:t=>t._uniqueMembers.length },
+    { key:"repos", label:"Repos (permission)", render:t=>teamAccessCell(t._uniqueRepos.map(r=>({team:r.name, permission:r.permission}))), filter:TXT(t=>t._uniqueRepos.map(r=>`${r.name} ${r.permission}`)), sort:t=>t._uniqueRepos.length },
+  ],
+  "teams-all": [
+    { key:"org", label:"Org", tdClass:"org-col", render:t=>t._org, filter:SEL(t=>t._org), filterNoEmpty:true, sort:t=>t._org||"" },
+    { key:"name", label:"Team", render:t=>`<strong>${t.name}</strong>`, filter:TXT(t=>t.name), filterNoEmpty:true, sort:t=>t.name||"" },
+    { key:"privacy", label:"Privacy", render:t=>badge(t.privacy), filter:SEL(t=>t.privacy), filterNoEmpty:true, sort:t=>t.privacy||"" },
+    { key:"defaultPerm", label:"Default Perm", render:t=>badge(t.permission), filter:SEL(t=>t.permission), filterNoEmpty:true, sort:t=>t.permission||"" },
+    { key:"memberCount", label:"Members", render:t=>t.members?.length??0, sort:t=>t.members?.length??0 },
+    { key:"memberLogins", label:"Member Logins", render:t=>expandableTextList((t.members||[]).map(m=>m.login)), filter:TXT(t=>(t.members||[]).map(m=>m.login)), sort:t=>t.members?.length??0 },
+    { key:"repos", label:"Repos (permission)", render:t=>teamAccessCell((t.repos||[]).map(r=>({team:r.name, permission:r.permission}))), filter:TXT(t=>(t.repos||[]).map(r=>`${r.name} ${r.permission}`)), sort:t=>t.repos?.length??0 },
+  ],
+  "repos": [
+    { key:"org", label:"Org", tdClass:"org-col", render:r=>r._org, filter:SEL(r=>r._org), filterNoEmpty:true, sort:r=>r._org||"" },
+    { key:"name", label:"Repo", render:r=>`<strong>${r.name}</strong>`, filter:TXT(r=>r.name), filterNoEmpty:true, sort:r=>r.name||"" },
+    { key:"visibility", label:"Visibility", render:r=>badge(r.visibility || (r.private ? "private" : "public")), filter:SEL(r=>r.visibility || (r.private ? "private" : "public")), filterNoEmpty:true, sort:r=>r.visibility || (r.private ? "private" : "public") },
+    { key:"archived", label:"Archived", render:r=>r.archived ? badge("closed") : '<span style="color:#d1d5db">—</span>', filter:SEL(r=>r.archived ? "closed" : ""), sort:r=>r.archived ? 1 : 0 },
+    { key:"teamAccess", label:"Team Access", render:r=>teamAccessCell(r._teamAccess), filter:TXT(r=>(r._teamAccess||[]).map(a=>`${a.team} ${a.permission}`)), sort:r=>(r._teamAccess||[]).length },
+    { key:"estUsers", label:"Est. Users (via teams)", render:r=>r._userCount, sort:r=>r._userCount||0 },
+    { key:"link", label:"Link", render:r=>`<a href="${r.html_url}" target="_blank">View ↗</a>` },
+  ],
+};
+
+function visibleColumns(colsKey) {
+  const hidden = state.hiddenCols[colsKey] || new Set();
+  return COLUMNS[colsKey].filter(c => !hidden.has(c.key));
+}
+
+/* ── filtering ── */
+const EMPTY_SENTINEL = "__EMPTY__"; // filter value meaning "match only rows where this column has no value"
+
+function isEmptyValue(values) {
+  return !values.length || values.every(v => v === undefined || v === null || String(v).trim() === "");
+}
+
+function applyColumnFilters(rows, colsKey) {
+  const filters = state.colFilters[colsKey];
+  if (!filters) return rows;
+  const active = Object.entries(filters).filter(([,v]) => v);
+  if (!active.length) return rows;
+  const cols = COLUMNS[colsKey];
+  return rows.filter(row => active.every(([colKey, filterVal]) => {
+    const col = cols.find(c => c.key === colKey);
+    if (!col || !col.filter) return true;
+    const raw = col.filter.value(row);
+    const values = Array.isArray(raw) ? raw : [raw];
+    if (filterVal === EMPTY_SENTINEL) return isEmptyValue(values);
+    if (col.filter.type === "select") return values.some(v => String(v) === filterVal);
+    const needle = filterVal.toLowerCase();
+    return values.some(v => String(v ?? "").toLowerCase().includes(needle));
+  }));
+}
+
+function onColFilterChange(colsKey, colKey, value) {
+  if (!state.colFilters[colsKey]) state.colFilters[colsKey] = {};
+  if (value) state.colFilters[colsKey][colKey] = value; else delete state.colFilters[colsKey][colKey];
+  const icon = document.getElementById(`filter-icon-${colsKey}-${colKey}`);
+  if (icon) icon.classList.toggle("active", !!value);
+  const th = document.getElementById(`filter-th-${colsKey}-${colKey}`);
+  if (th) th.classList.toggle("col-filtered", !!value);
+  renderActiveFiltersBar();
+  refreshTableBody();
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+}
+
+function renderActiveFiltersBar() {
+  const bar = document.getElementById("activeFiltersBar");
+  if (!bar) return;
+  const colsKey = currentColsKey();
+  const entries = colsKey && state.colFilters[colsKey] ? Object.entries(state.colFilters[colsKey]).filter(([,v]) => v) : [];
+  if (!entries.length) { bar.innerHTML = ""; return; }
+  const cols = COLUMNS[colsKey];
+  const chips = entries.map(([colKey, val]) => {
+    const col = cols.find(c => c.key === colKey);
+    const display = val === EMPTY_SENTINEL ? "(Empty)" : escapeHtml(val);
+    return `<span class="filter-chip">${escapeHtml(col ? col.label : colKey)}: ${display}<button type="button" onclick="onColFilterChange('${colsKey}','${colKey}','')" title="Clear this filter">✕</button></span>`;
+  }).join("");
+  bar.innerHTML = `<span class="filter-chip-label">Filters:</span>${chips}<button type="button" class="clear-all-filters" onclick="clearAllFilters('${colsKey}')">Clear all</button>`;
+}
+
+function clearAllFilters(colsKey) {
+  state.colFilters[colsKey] = {};
+  renderTable();
+}
+
+function onEmptyToggle(colsKey, colKey, checked) {
+  onColFilterChange(colsKey, colKey, checked ? EMPTY_SENTINEL : "");
+  renderFilterPopoverContent(); // rebuild so the text input enables/disables to match
+}
+
+/* re-renders only <tbody> so the filter-row <input>/<select> elements (and focus/cursor) survive typing */
+function refreshTableBody() {
+  const colsKey = currentColsKey();
+  if (!colsKey) return;
+  const cols = visibleColumns(colsKey);
+  const colspan = cols.length || 1;
+  const filtered = applySort(applyColumnFilters(getRows(), colsKey), colsKey);
+  const tbody = document.querySelector("#tableWrap tbody");
+  if (!tbody) return;
+  tbody.innerHTML = renderBodyRows(filtered, cols, colspan, emptyMessageForTab(state.tab));
+}
+
+/* ── sorting ── */
+function applySort(rows, colsKey) {
+  const s = state.sortState[colsKey];
+  if (!s) return rows;
+  const col = COLUMNS[colsKey].find(c => c.key === s.key);
+  if (!col || !col.sort) return rows;
+  const sorted = [...rows].sort((a, b) => {
+    const va = col.sort(a), vb = col.sort(b);
+    if (va < vb) return -1;
+    if (va > vb) return 1;
+    return 0;
+  });
+  if (s.dir === "desc") sorted.reverse();
+  return sorted;
+}
+
+function onSortClick(colsKey, colKey) {
+  const cur = state.sortState[colsKey];
+  if (cur && cur.key === colKey) {
+    state.sortState[colsKey] = cur.dir === "asc" ? { key: colKey, dir: "desc" } : null; // 3rd click clears sort
+  } else {
+    state.sortState[colsKey] = { key: colKey, dir: "asc" };
+  }
+  renderTable();
+}
+
+function emptyMessageForTab(tab) {
+  return { members:"No results", collaborators:"No outside collaborators found", teams:"No teams found", repos:"No repos found" }[tab] || "No results";
+}
+
+function renderBodyRows(rows, cols, colspan, emptyMessage) {
+  return rows.map(row => `<tr>${cols.map(c=>`<td${c.tdClass?` class="${c.tdClass}"`:""}>${c.render(row)}</td>`).join("")}</tr>`).join("")
+    || `<tr><td colspan="${colspan}" style="padding:24px;text-align:center;color:#9ca3af">${emptyMessage}</td></tr>`;
+}
+
+function headerCellHtml(colsKey, col) {
+  if (!col.filter && !col.sort) return `<th>${col.label}</th>`;
+  const filterActive = !!(col.filter && state.colFilters[colsKey] && state.colFilters[colsKey][col.key]);
+  const sortState = state.sortState[colsKey];
+  const isSorted = col.sort && sortState && sortState.key === col.key;
+  const arrow = isSorted ? (sortState.dir === "asc" ? " ▲" : " ▼") : "";
+  const labelHtml = col.sort
+    ? `<span class="sortable-label" onclick="onSortClick('${colsKey}','${col.key}')">${col.label}${arrow}</span>`
+    : col.label;
+  const filterBtn = col.filter
+    ? `<button type="button" class="filter-icon-btn${filterActive?" active":""}" id="filter-icon-${colsKey}-${col.key}" title="Filter" onclick="openFilterPopover(event,'${colsKey}','${col.key}')">${ICON_FUNNEL}</button>`
+    : "";
+  return `<th id="filter-th-${colsKey}-${col.key}" class="${filterActive?"col-filtered":""}">${labelHtml}${filterBtn}</th>`;
+}
+
+function renderColumnTable(rows, colsKey, emptyMessage) {
+  const cols = visibleColumns(colsKey);
+  const colspan = cols.length || 1;
+  const theadHtml = `<tr>${cols.map(c=>headerCellHtml(colsKey, c)).join("")}</tr>`;
+  const filtered = applySort(applyColumnFilters(rows, colsKey), colsKey);
+  return `<table><thead>${theadHtml}</thead><tbody>${renderBodyRows(filtered, cols, colspan, emptyMessage)}</tbody></table>`;
+}
+
+/* ── per-column filter popover (opened from the ▾ icon in each filterable header) ── */
+function filterPopoverBodyHtml(colsKey, col) {
+  const current = (state.colFilters[colsKey] && state.colFilters[colsKey][col.key]) || "";
+  const isEmptyOnly = current === EMPTY_SENTINEL;
+  if (col.filter.type === "select") {
+    const values = new Set();
+    getRows().forEach(row => {
+      const raw = col.filter.value(row);
+      (Array.isArray(raw) ? raw : [raw]).forEach(v => { if (v !== undefined && v !== null && String(v).trim() !== "") values.add(String(v)); });
+    });
+    const options = [...values].sort();
+    const emptyOption = col.filterNoEmpty ? "" : `<option value="${EMPTY_SENTINEL}" ${isEmptyOnly?"selected":""}>(Empty)</option>`;
+    return `<select onchange="onColFilterChange('${colsKey}','${col.key}', this.value)">
+      <option value="">Any</option>
+      ${emptyOption}
+      ${options.map(v => `<option value="${v.replace(/"/g,"&quot;")}" ${v===current?"selected":""}>${v}</option>`).join("")}
+    </select>`;
+  }
+  const emptyToggle = col.filterNoEmpty ? "" : `<label class="empty-toggle"><input type="checkbox" ${isEmptyOnly?"checked":""} onchange="onEmptyToggle('${colsKey}','${col.key}', this.checked)"> Empty only</label>`;
+  return `<input type="text" placeholder="Filter…" value="${isEmptyOnly?"":current.replace(/"/g,"&quot;")}" ${isEmptyOnly?"disabled":""} oninput="onColFilterChange('${colsKey}','${col.key}', this.value)">
+    ${emptyToggle}`;
+}
+
+function renderFilterPopoverContent() {
+  const open = state.openFilterPopover;
+  const pop = document.getElementById("filterPopover");
+  if (!open || !pop) return;
+  const col = COLUMNS[open.colsKey].find(c => c.key === open.colKey);
+  if (!col) return;
+  pop.innerHTML = filterPopoverBodyHtml(open.colsKey, col);
+}
+
+function openFilterPopover(e, colsKey, colKey) {
+  e.stopPropagation();
+  const pop = document.getElementById("filterPopover");
+  document.getElementById("columnsDropdown")?.classList.add("hidden");
+
+  // clicking the already-open column's icon again closes it
+  if (state.openFilterPopover && state.openFilterPopover.colsKey === colsKey && state.openFilterPopover.colKey === colKey) {
+    closeFilterPopover();
+    return;
+  }
+  state.openFilterPopover = { colsKey, colKey };
+  const rect = e.target.getBoundingClientRect();
+  pop.style.top = `${rect.bottom + 6}px`;
+  pop.style.left = `${Math.max(8, rect.right - 200)}px`;
+  pop.classList.remove("hidden");
+  renderFilterPopoverContent();
+}
+
+function closeFilterPopover() {
+  state.openFilterPopover = null;
+  document.getElementById("filterPopover")?.classList.add("hidden");
+}
+
+/* ── columns dropdown UI ── */
+function currentColsKey() {
+  const isUnique = state.view === "unique" && state.selectedOrg === "__all__";
+  if (state.tab === "members") return isUnique ? "members-unique" : "members-all";
+  if (state.tab === "collaborators") return isUnique ? "collaborators-unique" : "collaborators-all";
+  if (state.tab === "teams") return isUnique ? "teams-unique" : "teams-all";
+  if (state.tab === "repos") return "repos";
+  return null;
+}
+
+function renderColumnsMenu() {
+  const key = currentColsKey();
+  const dropdown = document.getElementById("columnsDropdown");
+  if (!dropdown) return;
+  if (!key) { dropdown.innerHTML = ""; return; }
+  const hidden = state.hiddenCols[key] || new Set();
+  dropdown.innerHTML = COLUMNS[key].map(c =>
+    `<label><input type="checkbox" ${hidden.has(c.key)?"":"checked"} onchange="toggleColumn('${key}','${c.key}', this.checked)"> ${c.label}</label>`
+  ).join("");
+}
+
+function toggleColumn(key, colKey, visible) {
+  if (!state.hiddenCols[key]) state.hiddenCols[key] = new Set();
+  if (visible) {
+    state.hiddenCols[key].delete(colKey);
+  } else {
+    state.hiddenCols[key].add(colKey);
+    if (state.colFilters[key]) delete state.colFilters[key][colKey]; // don't leave an invisible filter silently active
+    if (state.sortState[key] && state.sortState[key].key === colKey) state.sortState[key] = null; // ditto for sort
+  }
+  saveHiddenCols();
+  renderTable();
+}
+
+function toggleColumnsMenu(e) {
+  e.stopPropagation();
+  closeFilterPopover();
+  document.getElementById("columnsDropdown").classList.toggle("hidden");
+}
+
+document.addEventListener("click", (e) => {
+  const menu = document.getElementById("columnsMenu");
+  if (menu && !menu.contains(e.target)) document.getElementById("columnsDropdown")?.classList.add("hidden");
+  const pop = document.getElementById("filterPopover");
+  if (pop && !pop.contains(e.target)) closeFilterPopover();
+});
+
+/* "/" or Cmd/Ctrl+K jumps to the Search tab and focuses its input, from anywhere */
+document.addEventListener("keydown", (e) => {
+  if (document.getElementById("tableSection")?.classList.contains("hidden")) return; // nothing loaded yet
+  const isCmdK = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k";
+  const isSlash = e.key === "/" && !isCmdK;
+  if (!isCmdK && !isSlash) return;
+  const tag = (e.target.tagName || "").toLowerCase();
+  const isTyping = tag === "input" || tag === "textarea" || e.target.isContentEditable;
+  if (isSlash && isTyping) return; // "/" is a normal character while typing elsewhere; Cmd/Ctrl+K always hijacks
+  e.preventDefault();
+  if (state.tab !== "search") switchTab("search");
+  const input = document.getElementById("globalSearchInput");
+  if (input) { input.focus(); input.select(); }
+});
+
+function orgsInScope() {
+  return state.selectedOrg === "__all__" ? Object.keys(state.data) : [state.selectedOrg];
 }
 
 /* ── export ── */
 function exportCSV() {
-  const rows = getRows();
+  const rows = applySort(getRows(), currentColsKey());
   const isUnique = state.view === "unique" && state.selectedOrg === "__all__";
   let csvRows = [];
 
   if (state.tab === "members") {
     if (isUnique) {
-      csvRows = [["Login","Name","Email","Last Org Activity","Last Public Activity","Orgs","Roles","Profile URL"],
+      csvRows = [["Login","Name","Email","Last Org Activity","Last Public Activity","Orgs","Roles","Repo Count (via teams)","Repo Access","Profile URL"],
         ...rows.map(m => [m.login, m.name, m.email,
           m._lastActives?.map(a=>`${a.org}:${fmtDate(a.date)}`).join("; ")||"",
           fmtDate(m.lastPublicEvent)||"",
-          m._orgs.join("; "), m._roles.map(r=>`${r.org}:${r.role}`).join("; "), m.html_url])];
+          m._orgs.join("; "), m._roles.map(r=>`${r.org}:${r.role}`).join("; "),
+          Object.keys(m._repoAccess||{}).length,
+          Object.entries(m._repoAccess||{}).map(([repo,info])=>`${repo}:${info.permission}`).join("; "),
+          m.html_url])];
     } else {
-      csvRows = [["Org","Login","Name","Email","Last Org Activity","Last Public Activity","Role","Profile URL"],
-        ...rows.map(m => [m._org, m.login, m.name, m.email, fmtDate(m.lastOrgEvent)||"", fmtDate(m.lastPublicEvent)||"", m.role, m.html_url])];
+      csvRows = [["Org","Login","Name","Email","Last Org Activity","Last Public Activity","Role","Repo Count (via teams)","Repo Access","Profile URL"],
+        ...rows.map(m => [m._org, m.login, m.name, m.email, fmtDate(m.lastOrgEvent)||"", fmtDate(m.lastPublicEvent)||"", m.role,
+          Object.keys(m._repoAccess||{}).length,
+          Object.entries(m._repoAccess||{}).map(([repo,info])=>`${repo}:${info.permission}`).join("; "),
+          m.html_url])];
     }
+  } else if (state.tab === "repos") {
+    csvRows = [["Org","Repo","Visibility","Archived","Team Access","Est. Users (via teams)","URL"],
+      ...rows.map(r => [r._org, r.name, r.visibility || (r.private ? "private" : "public"), r.archived ? "yes" : "no",
+        (r._teamAccess||[]).map(a=>`${a.team}:${a.permission}`).join("; "), r._userCount, r.html_url])];
   } else if (state.tab === "collaborators") {
     if (isUnique) {
       csvRows = [["Login","Name","Email","Last Org Activity","Last Public Activity","Orgs","Profile URL"],
@@ -623,19 +1366,21 @@ function exportCSV() {
     }
   } else if (state.tab === "teams") {
     if (isUnique) {
-      csvRows = [["Team Name","Orgs","Unique Members Count","Member Logins"],
-        ...rows.map(t => [t.name, t._orgs.join("; "), t._uniqueMembers.length, t._uniqueMembers.map(m=>m.login).join("; ")])];
+      csvRows = [["Team Name","Orgs","Unique Members Count","Member Logins","Repo Access"],
+        ...rows.map(t => [t.name, t._orgs.join("; "), t._uniqueMembers.length, t._uniqueMembers.map(m=>m.login).join("; "),
+          t._uniqueRepos.map(r=>`${r.name}:${r.permission}`).join("; ")])];
     } else {
-      csvRows = [["Org","Team","Privacy","Permission","Members Count","Member Logins"],
-        ...rows.map(t => [t._org, t.name, t.privacy, t.permission, t.members?.length, t.members?.map(m=>m.login).join("; ")])];
+      csvRows = [["Org","Team","Privacy","Default Perm","Members Count","Member Logins","Repo Access"],
+        ...rows.map(t => [t._org, t.name, t.privacy, t.permission, t.members?.length, t.members?.map(m=>m.login).join("; "),
+          (t.repos||[]).map(r=>`${r.name}:${r.permission}`).join("; ")])];
     }
   } else if (state.tab === "orgs") {
     const orgs = state.selectedOrg === "__all__" ? Object.keys(state.data) : [state.selectedOrg];
-    csvRows = [["Org","Plan","Created","Members","Collaborators","Teams"],
+    csvRows = [["Org","Plan","Created","Members","Collaborators","Teams","Repos"],
       ...orgs.map(org => {
         const info = state.orgInfo[org] || {};
         return [org, info.plan?.name||"", fmtDate(info.created_at)||"",
-          state.data[org]?.members.length||0, state.data[org]?.collaborators.length||0, state.data[org]?.teams.length||0];
+          state.data[org]?.members.length||0, state.data[org]?.collaborators.length||0, state.data[org]?.teams.length||0, state.data[org]?.repos.length||0];
       })];
   }
 
@@ -643,6 +1388,33 @@ function exportCSV() {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([csv], { type:"text/csv" }));
   a.download = `github-inventory-${state.tab}-${isUnique?"unique":"all"}-${Date.now()}.csv`;
+  a.click();
+}
+
+/* full nested dump — unlike CSV, not scoped to the active tab; respects the org filter pills */
+function exportJSON() {
+  const payload = { exportedAt: new Date().toISOString(), orgs: {} };
+  orgsInScope().forEach(org => {
+    const d = state.data[org];
+    if (!d) return;
+    const info = state.orgInfo[org] || {};
+    payload.orgs[org] = {
+      info: { name: info.name || org, plan: info.plan?.name || null, created_at: info.created_at || null, html_url: info.html_url || null },
+      members: d.members,
+      collaborators: d.collaborators,
+      teams: d.teams,
+      repos: d.repos,
+      userRepoAccess: d.userRepoAccess,
+      teamsByUser: d.teamsByUser,
+      ownerCount: d.ownerCount,
+      collaboratorsBlocked: d.collaboratorsBlocked,
+      warnings: d.warnings,
+    };
+  });
+  const json = JSON.stringify(payload, null, 2);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+  a.download = `github-inventory-${Date.now()}.json`;
   a.click();
 }
 </script>
